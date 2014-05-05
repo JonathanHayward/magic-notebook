@@ -34,7 +34,9 @@ proc init {} {
 	global fullProgramName
 	global fullTclPath
 	global programMode
+	global serverAdminEmail
 	global shouldReplaceBackground
+	global shouldReplaceUserTemplate
 	global shouldUpdateHTML
 	global shouldUpdatePrivacyPolicy
 	#set programMode "sidebar"
@@ -50,7 +52,9 @@ proc init {} {
 	set filePrefix "/usr/lib/$programMode/"
 	#set fullTclPath "/usr/pkg/bin/tclsh"
 	set fullTclPath "/usr/bin/tclsh"
+	set serverAdminEmail "[exec whoami]@[exec hostname]"
 	set shouldReplaceBackground "yes"
+	set shouldReplaceUserTemplate "yes"
 	set shouldUpdateHTML "yes"
 	set shouldUpdatePrivacyPolicy "yes"
 	puts -nonewline "[exec clear]"
@@ -67,6 +71,10 @@ proc init {} {
 \nwindows open during installation: one for this script, and one to poke\
 \npoke around on the system and find appropriate answers to script questions.\
 \n\
+\nThis script does NOT recognize the abbreviations \"~\" and \"~user\" for\
+\npathnames that are not part of a URL. Please give the longhand version for\
+\nall Unix/Linux pathnames to files on your system.\
+\n\
 \nHit return to continue..."
 gets stdin
 }
@@ -81,10 +89,17 @@ global fullBaseURL
 global fullProgramName
 global fullTclPath
 global programMode
+global serverAdminEmail
 global shouldReplaceBackground
+global shouldReplaceUserTemplate
 global shouldUpdateHTML
 global shouldUpdatePrivacyPolicy
 
+puts -nonewline "\
+\nWhat is the $programMode administrator's publicly advertised e-mail address?\
+\n\
+\nServer administrator e-mail:"
+set serverAdminEmail [getValue $serverAdminEmail]
 puts -nonewline "\
 \nWhat is the full path to the Tcl executable (usually tclsh)?\
 \n\
@@ -125,7 +140,15 @@ puts -nonewline "\
 \nReplace background (yes/no)"
 set shouldReplaceBackground [getValue $shouldReplaceBackground]
 puts -nonewline\
-"\nAs of a recent version beginning and end of pages have been changed\
+"\nAs of version 1.3.2, improved templates are available for new user\
+\naccounts. If you have not customized the templates (editable by switching\
+\nto user \"guest\" from the administrative option, it is suggested that you\
+\nupgrade to the newer ones.\
+\n\
+\nWould you like to use the updated templates (yes/no)"
+set shouldReplaceUserTemplate [getValue $shouldReplaceUserTemplate]
+puts -nonewline\
+"\nAs of version 1.2, the beginning and end of pages have been changed\
 \nslightly to use CSS. Updating them will make the pages look nicer, but\
 \nWILL OVERWRITE any customizations you made to the beginning and end of\
 \npages.\
@@ -133,9 +156,9 @@ puts -nonewline\
 \nWould you like to use the updated HTML (yes/no)"
 set shouldUpdateHTML [getValue $shouldUpdateHTML]
 puts -nonewline\
-"\nThe old privacy policy page was not up to date. If you have not written\
-\nyour own privacy policy, I suggest that you replace the privacy policy with\
-\nthe (relatively) new one.\
+"\nBefore version 1.2, the old privacy policy page was not up to date. If you\
+\nhave not written your own privacy policy, it is suggested that you replace\
+\nthe privacy policy with the (relatively) new one.\
 \n\
 \nWould you like to use the improved privacy policy (yes/no)"
 set shouldUpdatePrivacyPolicy [getValue $shouldUpdatePrivacyPolicy]
@@ -153,13 +176,17 @@ puts -nonewline\
 puts -nonewline\
 "\n\tPublic HTML directory: $absoluteSnippetsDocumentRoot"
 puts -nonewline\
+"\n\tPublicly advertised server administrator e-mail: $serverAdminEmail"
+puts -nonewline\
 "\n\tPrivate $programMode data directory: $filePrefix"
 puts -nonewline\
-"\n\tShould background be changed: $shouldReplaceBackground"
+"\n\tShould background be updated: $shouldReplaceBackground"
 puts -nonewline\
-"\n\tShould HTML be changed: $shouldUpdateHTML"
+"\n\tShould user template be updated: $shouldReplaceUserTemplate"
 puts -nonewline\
-"\n\tShould privacy policy be changed: $shouldUpdatePrivacyPolicy"
+"\n\tShould HTML be updated: $shouldUpdateHTML"
+puts -nonewline\
+"\n\tShould privacy policy be updated: $shouldUpdatePrivacyPolicy"
 puts -nonewline "\n\
 \nAre these options all correct (yes/no)"
 if {[isTrue [getValue "yes"]]} {
@@ -207,7 +234,9 @@ proc prefixTildeWithSlash {path} {
 	}
 }
 
-# Presently unimplemented.
+#
+# Presently unimplemented. Should eventually accept csh-style tilde notion for
+# absolute paths of local files.
 #
 #proc processTildes {
 	#global absoluteSnippetsDocumentRoot
@@ -262,9 +291,16 @@ proc upgrade {} {
 	global fullProgramName
 	global fullTclPath
 	global programMode
+	global serverAdminEmail
+	global shouldReplaceUserTemplate
 	global shouldUpdateHTML
 	global shouldUpdatePrivacyPolicy
 	puts -nonewline "\nUpgrading...\n"
+	if {[isTrue $shouldReplaceUserTemplate]} {
+		exec rm "-rf" "[removeTrailingSlash $filePrefix]/users/template"
+		exec cp "-r" "data/users/template" "[removeTrailingSlash $filePrefix]/users/template"
+		exec chmod "-R" 777 "[removeTrailingSlash $filePrefix]/users/template"
+	}
 	if {[isTrue $shouldUpdateHTML]} {
 		exec cp "[removeTrailingSlash $filePrefix]/general/header"\
 		  "[removeTrailingSlash $filePrefix]/general/header.bak"
@@ -280,6 +316,8 @@ proc upgrade {} {
 		  $absoluteSnippetsDocumentRoot]/privacy.html"
 		substitute "$absoluteSnippetsDocumentRoot/privacy.html" "DOCUMENT_URL"\
 		  $documentURL
+		substitute "$absoluteSnippetsDocumentRoot/privacy.html"\
+		  "SERVER_ADMIN_EMAIL" $serverAdminEmail
 	}
 	if {![file exists "[removeTrailingSlash\
 	  $absoluteSnippetsDocumentRoot]/wideshadow.gif"]} {

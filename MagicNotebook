@@ -12,6 +12,7 @@
 #	Stuart Cassoff, who furnished the configuration file code
 #	Bruce Hartweg
 #	Jeff Hobbs
+#	Paul Johnson
 #	Cameron Laird
 #	Mick O'Donnell
 #	George Schlitz
@@ -345,17 +346,8 @@ proc addUser {login password passwordDuplicate} {
 		set newLogin(parent) ""
 		lappend passwords [array get newLogin]
 		writePasswords
-		file mkdir "[getFilePrefix]/users/$login"
-		if { [catch {open "[getFilePrefix]/users/$login/metadata" w} \
-			fileId] } {
-			logMessage "Couldn't open file\
-				[getFilePrefix]/users/$login/metadata.  Exiting from\
-				createLogin... $fileId"
-			panic
-		} else {
-			puts -nonewline $fileId ""
-			close $fileId
-		}
+		file copy -force "[getFilePrefix]/users/template" \
+		  "[getFilePrefix]/users/$login"
 		}
 	}
 	releaseLock [getPasswordFilename]
@@ -561,6 +553,7 @@ proc createFolder {{parent top}} {
 # at the same time.
 proc createLogin {} {
 	global passwords
+	global shouldSortMetadata
 	logProcedureCall "createLogin"
 	getLock [getPasswordFilename]
 	readPasswords
@@ -623,11 +616,13 @@ proc createLogin {} {
 			  "[getFilePrefix]/users/$login"
 			if {[getProgramMode] == "MagicNotebook"} {
 				readMetadata
+				sortMetadata
+				writeMetadata 1
 				puts "<input type=\"hidden\" name=\"login\" value=\"$login\">"
 				puts "<input type=\"hidden\" name=\"password\"\
 					value=\"$password\">"
 				showMagicNotebook
-				displayStandardChoices view
+				displayStandardChoices view 1
 			} else {
 				welcomeScreen $login $password
 			}
@@ -654,7 +649,7 @@ proc createLogin {} {
 }
 
 # This could have race conditions if two people use the same account and try
-# to make new topics at the same [clock clicks].
+# to make new notes at the same [clock clicks].
 proc createNote {{parent top}} {
 	global metadata
 	global shouldSortMetadata
@@ -735,7 +730,8 @@ proc deleteNote {identifier} {
 		file delete "[getFilePrefix]/users/[getUserName]/$identifier"
 		deleteFromMetadata $identifier
 	} else {
-		logProcedureCall "deleteNote called on an identifier which was not a topic."
+		logMessage "deleteNote called on an identifier which was not a\
+			note."
 	}
 }
 
@@ -808,68 +804,118 @@ proc displayCreateLogin {} {
 	registerQueryData "pageMode" "createLogin"
 }
 
+# Here we break all sorts of good software engineering practice to optimize.
+# More specifically, we want to avoid costly procedure calls as much as
+# possible, and so we break various sorts of encapsulation.
+#
+# This is one of a few areas where optimization is needed.
 proc displayForParent {parentName {htmlPrefix ""}} {
+	global additionalQueryData
+	global metadata
+	global pageModeResult
 	logProcedureCall "displayForParent"
+	set actionURL [getActionURL]
+	set cellPadding [getCellPadding]
+	if {$pageModeResult == "metaSnippets"} {
+		set cellPadding 0
+	}
+	set documentURL [getDocumentURL]
+	set closedFolderIconFilename "$documentURL/closed_folder.gif"
+	set closedNoteIconFilename "$documentURL/closed_topic.gif"
+	set editLinks [testUserFlag [getUserName] "editlink"]
+	set openFolderIconFilename "$documentURL/open_folder.gif"
+	set openNoteIconFilename "$documentURL/open_topic.gif"
+	set shadowIconFilename "$documentURL/shadow.gif"
+	set wideShadowIconFilename "$documentURL/wideshadow.gif"
 	foreach field [getWithParent $parentName] {
-		if {[testMetadataFlag $field "show"] || \
-		  [getPageMode] == "metaSnippets"} {
+		set metadataFlags ""
+		set noteName ""
+		foreach currentPacked $metadata {
+			array set currentUnpacked $currentPacked
+			if {$currentUnpacked(identifier) == $field} {
+				set metadataFlags $currentUnpacked(flags)
+				set noteName $currentUnpacked(title)
+			}
+		}
+		if {[regexp -- "show" $metadataFlags] || \
+		  $pageModeResult == "metaSnippets"} {
 			puts "$htmlPrefix<table border=\"0\" cellspacing=\"0\"\
-			  cellpadding=\"3\">\n<tr>\n"
-			if {[getPageMode] == "view" || [getPageMode] == "connect" || \
+			  cellpadding=\"$cellPadding\">\n<tr>\n"
+			if {$pageModeResult == "view" || $pageModeResult == "connect" || \
 				[CGIValue pageMode] == "createLogin"} {
 				puts "$htmlPrefix<td>"
-				if {[testMetadataFlag $field "expand"]} {
-					puts -nonewline "$htmlPrefix[getCollapseLinkBeginning\
-					  $field]"
-					if {[testMetadataFlag $field "folder"]} {
-						puts "<img src=\"[getOpenFolderIconFilename]\"\
+				if {[regexp -- "expand" $metadataFlags]} {
+					puts -nonewline "$htmlPrefix<a class=\"titlelink\"\
+					  href=\"$actionURL?pageMode=view&note=$field&action=collapse_$field&$additionalQueryData\">"
+					if {[regexp -- "folder" $metadataFlags]} {
+						puts "<img src=\"$openFolderIconFilename\"\
 						  border=\"0\" alt=\"\"></a>"
 					} else {
-						puts "<img src=\"[getOpenNoteIconFilename]\"\
+						puts "<img src=\"$openNoteIconFilename\"\
 						  border=\"0\" alt=\"\"></a>"
 					}
 				} else {
-					puts -nonewline "$htmlPrefix[getExpandLinkBeginning\
-					  $field]"
-					if {[testMetadataFlag $field "folder"]} {
-						puts "<img src=\"[getClosedFolderIconFilename]\"\
+					puts -nonewline "$htmlPrefix<a class=\"titlelink\"\
+					  href=\"$actionURL?pageMode=view&note=$field&action=expand_$field&$additionalQueryData\">"
+					if {[regexp -- "folder" $metadataFlags]} {
+						puts "<img src=\"$closedFolderIconFilename\"\
 						  border=\"0\" alt=\"\"></a>"
 					} else {
-						puts "<img src=\"[getClosedNoteIconFilename]\"\
+						puts "<img src=\"$closedNoteIconFilename\"\
 						  border=\"0\" alt=\"\"></a>"
 					}
 				}
 				puts "$htmlPrefix</td><td>"
-				if {[testUserFlag [getUserName] "editlink"]} {
-					puts -nonewline "$htmlPrefix[getEditLinkBeginning\
-					  $field]"
+				if {$editLinks} {
+					if {[regexp -- "folder" $metadataFlags]} {
+						puts -nonewline "$htmlPrefix<a class=\"titlelink\"\
+							href=\"$actionURL?$additionalQueryData&pageMode=metaSnippetsAction&action=editfolder_$field\">"
+						} else {
+							puts -nonewline "$htmlPrefix<a
+								class=\"titlelink\"\
+								href=\"$actionURL?$additionalQueryData&pageMode=metaSnippetsAction&action=editnote_$field\">"
+						}
 				} else {
-					if {[testMetadataFlag $field "expand"]} {
+					if {[regexp -- "expand" $metadataFlags]} {
 						puts -nonewline\
-						  "$htmlPrefix[getCollapseLinkBeginning $field]"
+						  "$htmlPrefix<a class=\"titlelink\"\
+						  href=\"$actionURL?pageMode=view&note=$field&action=collapse_$field&$additionalQueryData\">"
 					} else {
 						puts -nonewline\
-						  "$htmlPrefix[getExpandLinkBeginning $field]"
+						  "$htmlPrefix<a class=\"titlelink\"\
+						  href=\"$actionURL?pageMode=view&note=$field&action=expand_$field&$additionalQueryData\">"
 					}
 				}
 			} else {
 				puts "$htmlPrefix<td>"
-				puts -nonewline "$htmlPrefix[getEditLinkBeginning $field]"
+				if {[regexp -- "folder" $metadataFlags]} {
+					puts -nonewline "$htmlPrefix<a class=\"titlelink\"\
+						href=\"$actionURL?$additionalQueryData&pageMode=metaSnippetsAction&action=editfolder_$field\">"
+					} else {
+						puts -nonewline "$htmlPrefix<a
+							class=\"titlelink\"\
+							href=\"$actionURL?$additionalQueryData&pageMode=metaSnippetsAction&action=editnote_$field\">"
+					}
 			}
-			puts "$htmlPrefix[getOpenNoteNameTag][getNoteName $field][getCloseNoteNameTag]</a></td></tr>"
-			if {[testMetadataFlag $field "expand"] || [getPageMode] ==
+			puts "$noteName</a></td></tr>"
+			if {[regexp -- "expand" $metadataFlags] || $pageModeResult ==
 			"metaSnippets"} {
-				puts "$htmlPrefix<tr><td><img src=\"[getShadowIconFilename]\"\
-				  border=\"0\"></td>"
-				if {[testMetadataFlag $field "expand"] || \
-				  [getPageMode] == "metaSnippets"} {
-					if {[testMetadataFlag $field "folder"]} {
+				if {$pageModeResult == "metaSnippets"} {
+					puts "$htmlPrefix<tr><td width=\"50\"><img src=\"$shadowIconFilename\"\
+					  border=\"0\"></td>"
+				} else {
+					puts "$htmlPrefix<tr><td><img src=\"$shadowIconFilename\"\
+					  border=\"0\"></td>"
+				}
+				if {[regexp -- "expand" $metadataFlags] || \
+				  $pageModeResult == "metaSnippets"} {
+					if {[regexp -- "folder" $metadataFlags]} {
 						puts -nonewline "$htmlPrefix<td>"
 						displayForParent $field "	$htmlPrefix"
 						puts -nonewline "</td>"
 					} else {
-						if {[getPageMode] != "metaSnippets" && \
-						  [getPageMode] != "metaSnippetsAction"} {
+						if {$pageModeResult != "metaSnippets" && \
+						  $pageModeResult != "metaSnippetsAction"} {
 							puts -nonewline "$htmlPrefix<td>"
 							printHeader $field
 							printSnippet $field
@@ -883,6 +929,7 @@ proc displayForParent {parentName {htmlPrefix ""}} {
 		}
 	}
 }
+
 proc displayLogin {} {
 	logProcedureCall "displayLogin"
 	puts -nonewline "<p>E-mail address:<br>\n\
@@ -896,16 +943,6 @@ proc displayLogin {} {
 		<p><input type=\"image\" name=\"Log in!\"\ border=\"0\"
 		src=\"[getDocumentURL]/login.jpg\"></p>\n"
 		registerQueryData "pageMode" "view"
-}
-
-proc displayMotd {} {
-	logProcedureCall "displayMotd"
-	if {[file exists [getFilePrefix]/general/motd]} {
-		readFile [getFilePrefix]/general/motd
-	}
-	if {[file exists [getFilePrefix]/users/[getUserName]]} {
-		readFile [getFilePrefix]/users/[getUserName]
-	}
 }
 
 proc displayMoveMenu {identifier} {
@@ -922,14 +959,14 @@ proc displayMoveMenu {identifier} {
 	set items [entrySort $items fullPathname]
 	puts -nonewline "<p>Move to: <select name=\"motion\"\
 	  onclick=\"document.[getProgramMode].submit()\">\
-	  <option value=\"topicbookMove_noop_noop\" selected>Don't move this\
+	  <option value=\"notebookMove_noop_noop\" selected>Don't move this\
 	  anywhere.</option>\n\
-	  <option value=\"topicbookMove_"
+	  <option value=\"notebookMove_"
 	puts -nonewline $identifier
 	puts "_top\">Outside of all folders.</option>"
 	foreach destination $items {
 		puts -nonewline "<option\
-		  value=\"topicbookMove_"
+		  value=\"notebookMove_"
 		puts -nonewline $identifier
 		puts "_$destination\"\
 		  >[getFullPath $destination]</option>"
@@ -972,44 +1009,86 @@ proc displayNewNoteMenu {} {
 		}
 	}
 	set items [entrySort $items fullPathname]
-	puts -nonewline "<p>Add a new topic to: <select name=\"newtopic\"\
+	puts -nonewline "<p>Add a new note to: <select name=\"newnote\"\
 	  onclick=\"document.[getProgramMode].submit()\">\
-	  <option value=\"newtopic_noop\" selected>Don't add a new topic.</option>\
-	  <option value=\"newtopic_top\">Outside of all folders.</option>"
+	  <option value=\"newnote_noop\" selected>Don't add a new note.</option>\
+	  <option value=\"newnote_top\">Outside of all folders.</option>"
 	foreach destination $items {
 		puts -nonewline "<option\
-		  value=\"newtopic_$destination\"\
+		  value=\"newnote_$destination\"\
 		  >[getFullPath $destination]</option>"
 	}
 	puts "</select></p>"
 }
 
-proc displayStandardChoices {{displayMode view}} {
+proc displaySearchResults {} {
+    logProcedureCall "displaySearchResults"
+    set searchResults [getSearchResults]
+    if {$searchResults == {}} {
+        puts -nonewline "<h2>Searching for \"[CGIValue searchQuery]\" didn't \
+          find anything.</h2>"
+    } else {
+        puts -nonewline "<h2>Search results for \"[CGIValue\
+          searchQuery]\":</h2>\n"
+        puts -nonewline "<blockquote>\n"
+        puts -nonewline "<p>\n"
+        foreach match $searchResults {
+            getExpandLinkBeginning $match
+            puts -nonewline "[getFullPath $match]</a><br>\n"
+        }
+        puts -nonewline "</p>\n"
+        puts -nonewline "</blockquote>\n"
+    }
+}
+
+proc displayStandardChoices {{displayMode view} {checked 0}} {
 	logProcedureCall "displayStandardChoices"
 	if {[CGIValue accessMethod] == "guest"} {
 		puts -nonewline "<p><input type=\"image\" name=\"logout_button\"\
 			border=\"0\" src=\"[getDocumentURL]/logout.jpg\"></p>\n"
 		return
 	}
-	puts "<hr>\n<p>"
+	puts "<br>\n<hr>\n<p>"
+    if {$displayMode == "search"} {
+        puts "<input type=\"radio\" name=\"pageMode\" value=\"search\" \
+          onclick=\"document.[getProgramMode].submit()\"\
+          checked> \
+          Search for: <input type=\"text\" name=\"searchQuery\" \
+          size=\"[expr [getTextWidth] - 20]\" \
+          value=\"[CGIValue searchQuery]\"><br>"
+    } else {
+        puts "<input type=\"radio\" name=\"pageMode\" value=\"search\" \
+          onclick=\"document.[getProgramMode].submit()\"\
+          > \
+          Search for: <input type=\"text\" name=\"searchQuery\" \
+          size=\"[expr [getTextWidth] - 20]\"><br>"
+    }
 	if {$displayMode == "view"} {
 		if {[getProgramMode] != "MagicNotebook"} {
 			puts -nonewline "<input type=\"radio\" name=\"pageMode\"\
-				value=\"view\"\ checked\
-				onclick=\"document.[getProgramMode].submit()\"\
+				value=\"view\" "
+			if {$checked} {
+				puts -nonewline "checked "
+			}
+			puts -nonewline\
+				"onclick=\"document.[getProgramMode].submit()\"\
 				>\n"
 			puts -nonewline "Show another [getProgramName] page.<br>\n"
 		}
 	}
 	if {$displayMode != "view"} {
 		puts "<input type=\"radio\" name=\"pageMode\" value=\"view\"\n\
-			onclick=\"document.[getProgramMode].submit()\"\
-			checked> Return to the viewing page.<br>"
+			onclick=\"document.[getProgramMode].submit()\""
+		if {$checked && $displayMode != "search"} {
+			puts -nonewline " checked"
+		}
+		puts -nonewline "> Go to the viewing page.<br>"
 	}
 	if {$displayMode != "metaSnippet"} {
 		puts -nonewline "<input type=\"radio\" name=\"pageMode\" value=\"metaSnippets\"\
 			onclick=\"document.[getProgramMode].submit()\""
-		if {[getProgramMode] == "MagicNotebook" && $displayMode == "view"} {
+		if {[getProgramMode] == "MagicNotebook" && $displayMode == "view" &&
+			$checked} {
 			puts -nonewline "checked"
 		}
 		puts -nonewline ">\n\
@@ -1043,20 +1122,66 @@ proc displayStandardChoices {{displayMode view}} {
 		src=\"[getDocumentURL]/submit.jpg\"></p>\n"
 }
 
+proc editDisplayForParent {parentName {htmlPrefix ""}} {
+	global additionalQueryData
+	global metadata
+	global pageModeResult
+	logProcedureCall "editDisplayForParent"
+	set actionURL [getActionURL]
+	set documentURL [getDocumentURL]
+	set closedFolderIconFilename "$documentURL/closed_folder.gif"
+	set closedNoteIconFilename "$documentURL/closed_topic.gif"
+	set editLinks [testUserFlag [getUserName] "editlink"]
+	set openFolderIconFilename "$documentURL/open_folder.gif"
+	set openNoteIconFilename "$documentURL/open_topic.gif"
+	set shadowIconFilename "$documentURL/shadow.gif"
+	set wideShadowIconFilename "$documentURL/wideshadow.gif"
+	foreach field [getWithParent $parentName] {
+		set metadataFlags ""
+		set noteName ""
+		foreach currentPacked $metadata {
+			array set currentUnpacked $currentPacked
+			if {$currentUnpacked(identifier) == $field} {
+				set metadataFlags $currentUnpacked(flags)
+				set noteName $currentUnpacked(title)
+			}
+		}
+		if {[regexp -- "folder" $metadataFlags]} {
+			puts -nonewline "$htmlPrefix<a class=\"titlelink\"\
+			  href=\"[getActionURL]?$additionalQueryData&pageMode=metaSnippetsAction&action=editfolder_$field\">"
+		} else {
+			puts -nonewline "<a class=\"titlelink\"\
+			  href=\"[getActionURL]?$additionalQueryData&pageMode=metaSnippetsAction&action=editnote_$field\">"
+		}
+		puts "$noteName $field</a>"
+		#puts "$htmlPrefix<table border=\"0\" cellspacing=\"0\"\
+		#	cellpadding=\"0\"><tr><td height=\"1\"\
+		#	width=\"100%\" colspan=\"2\"> </td></tr>\
+		#	<tr><td> <img\
+		#	src=\"$wideShadowIconFilename\" border=\"0\"></td>"
+		puts "$htmlPrefix<table border=\"0\" cellspacing=\"0\"\
+			cellpadding=\"0\"><tr><td height=\"1\"\
+			width=\"100%\" colspan=\"2\"> </td></tr><tr><td><img\
+			src=\"$wideShadowIconFilename\" border=\"0\"></td>"
+		if {[regexp -- "folder" $metadataFlags]} {
+			puts -nonewline "$htmlPrefix<td>"
+			editDisplayForParent $field "	$htmlPrefix"
+			puts -nonewline "</td>"
+		} else {
+			puts "$htmlPrefix</tr></table>"
+		}
+	}
+}
+
 proc editFolder {identifier} {
 	logProcedureCall "editFolder"
 	expandAppropriately $identifier
-	puts -nonewline "<input type=\"hidden\" name=\"topic\"\
+	puts -nonewline "<input type=\"hidden\" name=\"note\"\
 		value=\"$identifier\">\n\
 		<input type=\"hidden\" name=\"pageMode\" value=\"metaSnippetsAction\">\n\
 		<h2>Folder</h2>\n"
-	registerQueryData "topic" $identifier
+	registerQueryData "note" $identifier
 	registerQueryData "pageMode" "metaSnippetsAction"
-	if {[getProgramMode] == "sidebar"} {
-		puts -nonewline "<p>This topic name will be visible to you when you\
-			edit this page, but not to your visitors. Use the header, below,\
-			to put any desired HTML before items in this topic.</p>\n"
-	}
 	puts -nonewline "<p><input type=\"text\" name=\"title_$identifier\"\
 		size=\"[getTextWidth]\" value=\"[quoteHtmlMetacharacters [getNoteName\
 		$identifier]]\"></p>\n"
@@ -1064,8 +1189,23 @@ proc editFolder {identifier} {
 		<p><input type=\"radio\" name=\"shouldsave\" value=\"yes\" checked>\
 		Save any changes.<br>\n\
 		<input type=\"radio\" name=\"shouldsave\" value=\"no\">\
-		Discard any changes.</p>\n"
+		Discard any changes.</p>\n\
+		<hr>\n"
 	displayMoveMenu $identifier
+	puts -nonewline "<hr>\n"
+	if {[testMetadataFlag $identifier "show"]} {
+		puts "<p><input type=\"radio\" name=\"action\"\
+			value=\"hide_$identifier\"\
+			onclick=\"document.[getProgramMode].submit()\"\
+			>\
+			Hide this folder from the main viewing page.<br>"
+	} else {
+		puts "<p><input type=\"radio\" name=\"action\"\
+			value=\"show_$identifier\"\
+			onclick=\"document.[getProgramMode].submit()\"\
+			>\
+			Show this folder from the main viewing page.<br>"
+	}
 	puts "<input type=\"radio\" name=\"action\"\
 		value=\"newSubFolder\"\
 		onclick=\"document.[getProgramMode].submit()\"\
@@ -1075,7 +1215,8 @@ proc editFolder {identifier} {
 		value=\"newSubNote\"\
 		onclick=\"document.[getProgramMode].submit()\"\
 		>\n\
-		Add a new topic to this folder.</p>"
+		Add a new note to this folder.</p>\n\
+		<hr>\n"
 	puts -nonewline "<p><input type=\"radio\" name=\"action\"\
 		onclick=\"document.[getProgramMode].submit()\"\
 		value=\"view\" checked> Go to the viewing page.<br>\
@@ -1084,74 +1225,68 @@ proc editFolder {identifier} {
 		Go to the editing page.<br>
 		<input type=\"radio\" name=\"action\"
 		onclick=\"document.[getProgramMode].submit()\"\
-		value=\"accountManagement\"> Change your password or configure\
-		configure the behavior of these pages.</p>"
-	if {[testMetadataFlag $identifier "show"]} {
-		puts "<input type=\"radio\" name=\"action\"\
-			value=\"hide_$identifier\"\
+		value=\"accountManagement\"> Change your password or configure the\
+		behavior of these pages."
+	if {[isAdministrator [getUserName]]} {
+		puts -nonewline "<br><input type=\"radio\" name=\"action\"\
+			value=\"administrative\"\
 			onclick=\"document.[getProgramMode].submit()\"\
-			>\
-			Hide</p>"
-	} else {
-		puts "<input type=\"radio\" name=\"action\"\
-			value=\"show_$identifier\"\
-			onclick=\"document.[getProgramMode].submit()\"\
-			>\
-			Show</p>"
+			> Use administrative tools."
 	}
+	puts -nonewline "</p>"
 	puts -nonewline "<hr>\
 		<p><input type=\"radio\" name=\"action\"\
 		value=\"deletefolder_$identifier\"> DELETE this folder and everything\
 		in it.</p><hr>"
-	#displayStandardChoices editFolder
 	puts -nonewline "<p><input type=\"image\" name=\"Go!\"\ border=\"0\"
 		src=\"[getDocumentURL]/submit.jpg\"></p>\n"
 }
-
 proc editNote {identifier} {
 	logProcedureCall "editNote"
 	expandAppropriately $identifier
-	puts -nonewline "<input type=\"hidden\" name=\"topic\"\
+	puts -nonewline "<input type=\"hidden\" name=\"note\"\
 		value=\"$identifier\">\n\
 		<input type=\"hidden\" name=\"pageMode\" value=\"metaSnippetsAction\">\n\
 		<h2>Note</h2>\n"
-	registerQueryData "topic" $identifier
+	registerQueryData "note" $identifier
 	registerQueryData "pageMode" "metaSnippetsAction"
 	if {[getProgramMode] == "sidebar"} {
-		puts -nonewline "<p>This topic name will be visible to you when you\
+		puts -nonewline "<p>This note name will be visible to you when you\
 			edit this page, but not to your visitors. Use the header, below,\
-			to put any desired HTML before items in this topic.</p>\n"
+			to put any desired HTML before items in this note.</p>\n"
 	}
 	puts -nonewline "<p><input type=\"text\" name=\"title_$identifier\"\
 		size=\"[getTextWidth]\" value=\"[quoteHtmlMetacharacters [getNoteName\
 		$identifier]]\"></p>\n"
 	if {[getProgramMode] == "MagicNotebook"} {
 		puts -nonewline "<h2>This Note's Text</h2>\n"
-		puts -nonewline "<textarea name=\"header_$identifier\" rows=\"10\"\n"
+		puts -nonewline "<p><textarea name=\"header_$identifier\"\
+			rows=\"[getTextHeight]\"\n"
 	} else {
 		puts -nonewline "<h2>Header</h2>\n\
 			<p>This header, if any, will appear before each view.</p>\n"
-		puts -nonewline "<textarea name=\"header_$identifier\" rows=\"3\"\n"
+		puts -nonewline "<p><textarea name=\"header_$identifier\" rows=\"3\"\n"
 	}
-	puts -nonewline "cols=\"[getTextWidth]\" wrap=\"soft\">[quoteHtmlMetacharacters\
-		[getHeader $identifier]]</textarea>"
+	puts -nonewline "cols=\"[getTextWidth]\"\
+		wrap=\"soft\">[quoteHtmlMetacharacters\
+		[getHeader $identifier]]</textarea></p>"
+	set note [readNote $identifier]
 	if {[getProgramMode] != "MagicNotebook" || [testUserFlag [getUserName]\
-	  "editview"]} {
-		set topic [readNote $identifier]
+	  "editsnippets"] || [llength $note] > 0} {
 		if {[getProgramMode] == "MagicNotebook"} {
 			puts -nonewline "<h2>Random Text</h2>\n\
 				<p>The Magic Notebook can display random text under what you\
 				type above. If you would like a randomly chosen quote to\
 				appear, type the first thing in the box below, and then click\
-				on \"Continue editing this topic\" for as many other things as\
+				on \"Continue editing this note\" for as many other things as\
 				you would like to see.</p>\n"
 		} else {
 			puts "<h2>Entries:</h2>"
 		}
 		set newIndex 0
-		if {[llength $topic] > 0} {
-			for {set index 0} {$index < [llength $topic]} {incr index} {
-				set entry [lindex $topic $index]
+		if {[llength $note] > 0} {
+			for {set index 0} {$index < [llength $note]} {incr index} {
+				set entry [lindex $note $index]
 				puts -nonewline "<p><textarea name=\"value_$identifier"
 				puts -nonewline "_$index\" rows=\"3\" cols=\"[getTextWidth]\"\
 				  wrap=\"soft\">"
@@ -1176,49 +1311,61 @@ proc editNote {identifier} {
 		<hr>\n"
 	if {[getProgramMode] == "MagicNotebook"} {
 		displayMoveMenu $identifier
-		if {[testMetadataFlag $identifier "show"]} {
-		puts -nonewline "<p><input type=\"radio\" name=\"action\"\n\
-			value=\"hide_$identifier\"
-			onclick=\"document.[getProgramMode].submit()\"\
-			> Hide<br>"
-		} else {
-		puts -nonewline "<p><input type=\"radio\" name=\"action\"\n\
-			value=\"show_$identifier\"
-			onclick=\"document.[getProgramMode].submit()\"\
-			> Show<br>"
-		}
+		puts -nonewline "<hr>\n"
+	}
+	puts -nonewline "<p><input type=\"radio\" name=\"action\" value=\"view\"\n\
+		onclick=\"document.[getProgramMode].submit()\"\
+		checked> Go to the viewing page.<br>\n"
+	puts -nonewline "<input type=\"radio\" name=\"action\"\
+		value=\"metaSnippets\"\
+		onclick=\"document.[getProgramMode].submit()\">\
+		Go to the editing menu.<br>\n"
+	if {[getProgramMode] == "MagicNotebook"} {
 		puts -nonewline \
 			"<input type=\"radio\" name=\"action\"\n\
-			value=\"edittopic_$identifier\"\
+			value=\"editnote_$identifier\"\
 			onclick=\"document.[getProgramMode].submit()\"\
-			> Continue editing this topic<br>\n"
+			> Continue editing this note.<br>\n"
+	}
+	if {[getProgramMode] == "MagicNotebook"} {
+		if {[testMetadataFlag $identifier "show"]} {
+		puts -nonewline "<input type=\"radio\" name=\"action\"\n\
+			value=\"hide_$identifier\"
+			onclick=\"document.[getProgramMode].submit()\"\
+			> Hide this note from the main viewing page.<br>"
+		} else {
+		puts -nonewline "<input type=\"radio\" name=\"action\"\n\
+			value=\"show_$identifier\"
+			onclick=\"document.[getProgramMode].submit()\"\
+			> Show this note from the main viewing page.<br>"
+		}
 	} else {
 		puts -nonewline \
 			"<p><input type=\"radio\" name=\"action\"\n\
-			value=\"edittopic_$identifier\"\
+			value=\"editnote_$identifier\"\
 			onclick=\"document.[getProgramMode].submit()\"\
-			> Continue editing this topic<br>\n"
+			> Continue editing this note.<br>\n"
 	}
-	puts -nonewline "<input type=\"radio\" name=\"action\" value=\"metaSnippets\"\
-		onclick=\"document.[getProgramMode].submit()\">\
-		Return to the editing menu.<br>\n"
-	puts "<input type=\"radio\" name=\"action\" value=\"view\"\n\
-		onclick=\"document.[getProgramMode].submit()\"\
-		checked> Return to the viewing page.<br>\n\
-		<input type=\"radio\" name=\"action\"
+	puts -nonewline "<input type=\"radio\" name=\"action\"
 		onclick=\"document.[getProgramMode].submit()\"\
 		value=\"accountManagement\"> Change your password or \
-		configure the behavior of these pages.</p>\
-		<hr>\
+		configure the behavior of these pages."
+	if {[isAdministrator [getUserName]]} {
+		puts -nonewline "<br><input type=\"radio\" name=\"action\"\
+			value=\"administrative\"\
+			onclick=\"document.[getProgramMode].submit()\"\
+			> Use administrative tools."
+	}
+	puts -nonewline "</p>"
+	puts -nonewline "<hr>\
 		<p><input type=\"radio\" name=\"action\"\
-		value=\"deletetopic_$identifier\"> DELETE this topic.</p>\
+		value=\"deletenote_$identifier\"> DELETE this note.</p>\
 		<hr>\
 		<p><input type=\"image\" name=\"Go!\"\ border=\"0\"
 		src=\"[getDocumentURL]/submit.jpg\"></p>\n"
-	#displayStandardChoices editNote
 }
 
-proc entrySort {toSort {criterionToSortOn "topicName"}} {
+proc entrySort {toSort {criterionToSortOn "noteName"}} {
 	global metadata
 	logProcedureCall "entrySort"
 	# Randomized QuickSort implemented after bubble sort took too long.
@@ -1236,7 +1383,7 @@ proc entrySort {toSort {criterionToSortOn "topicName"}} {
 		fullPathname {
 			set dividingFieldToCompare [getFullPath $dividingKey]
 		}
-		topicName -
+		noteName -
 		default {
 			set dividingFieldToCompare [getNoteName $dividingKey]
 		}
@@ -1247,7 +1394,7 @@ proc entrySort {toSort {criterionToSortOn "topicName"}} {
 				fullPathname {
 					set currentFieldToCompare [getFullPath $current]
 				}
-				topicName -
+				noteName -
 				default {
 					set currentFieldToCompare [getNoteName $current]
 				}
@@ -1274,7 +1421,7 @@ proc entrySort {toSort {criterionToSortOn "topicName"}} {
 	[entrySort $greaterOrEqualBin $criterionToSortOn]]
 }
 
-proc entrySortWithParent {parentID {criterionToSortOn "topicName"}} {
+proc entrySortWithParent {parentID {criterionToSortOn "noteName"}} {
 	logProcedureCall "entrySortWithParent"
 	debugLog "eswp1 [clock clicks]"
 	return [entrySort [getWithParent $parentID] $criterionToSortOn]
@@ -1297,14 +1444,13 @@ proc expand {id} {
 proc expandAppropriately {identifier} {
 	global shouldExpandAppropriately
 	logProcedureCall "expandAppropriately"
-	logMessage "ea $shouldExpandAppropriately"
 	if {$shouldExpandAppropriately} {
 		if {[shouldExpandOnlySelected]} {
 			collapseAllSiblingsOfAncestors $identifier
 		}
 		if {[getSelectedEntity] == $identifier &&
 		  ![isNoteBeingCollapsed $identifier]} {
-			expand $identifier
+			expandOnlyNodeAndAllParents $identifier
 		} else {
 			collapse $identifier
 		}
@@ -1316,8 +1462,9 @@ proc expandOnlyNodeAndAllParents {nodeIdentifier} {
 	logProcedureCall "expandOnlyNodeAndAllParents"
 	foreach packedRow $metadata {
 		array set currentRow $packedRow
-		if {![isAncestor $nodeIdentifier $currentRow(identifier)]} {
-		collapse $currentRow(identifier)
+		if {[isSiblingOfAncestor $currentRow(identifier) $nodeIdentifier] && \
+          ![isAncestor $nodeIdentifier $currentRow(identifier)]} {
+            collapse $currentRow(identifier)
 		}
 	}
 	expandOnlyNodeAndAllParentsInternal $nodeIdentifier
@@ -1380,11 +1527,17 @@ proc getActionURL {} {
 	return [getConfigValue "actionURL" "/cgi-bin/[getProgramMode]"]
 }
 
+proc getCellPadding {} {
+	logProcedureCall "getCellPadding"
+	return [getConfigValue "cellpadding" "3"]
+}
+
 proc getClosedFolderIconFilename {} {
 	logProcedureCall "getClosedFolderIconFilename"
 	return "[getDocumentURL]/closed_folder.gif"
 }
 
+# Not [getDocumentURL]/closed_note.gif for reasons of backwards compatibility.
 proc getClosedNoteIconFilename {} {
 	logProcedureCall "getClosedNoteIconFilename"
 	return "[getDocumentURL]/closed_topic.gif"
@@ -1399,7 +1552,7 @@ proc getCollapseLinkBeginning {identifier} {
 	global additionalQueryData
 	logProcedureCall "getCollapseLinkBeginning"
 	puts -nonewline "<a class=\"titlelink\"\
-	  href=\"[getActionURL]?pageMode=view&topic=$identifier&action=collapse_$identifier&$additionalQueryData\">"
+	  href=\"[getActionURL]?pageMode=view&note=$identifier&action=collapse_$identifier&$additionalQueryData\">"
 }
 
 proc getConfigFilename {} {
@@ -1422,6 +1575,18 @@ proc getConfigValue {key defaultValue} {
 proc getCurrentMtimeFilename {} {
 	logProcedureCall "getCurrentMtimeFilename"
 	return "[getFilePrefix]/general/current"
+}
+
+proc getCurrentReleaseNumber {} {
+	global currentReleaseNumber
+	logProcedureCall "getCurrentReleaseNumber"
+	return $currentReleaseNumber
+}
+
+proc getCurrentVersionNumber {} {
+	global currentVersionNumber
+	logProcedureCall "getCurrentVersionNumber"
+	return $currentVersionNumber
 }
 
 proc getDefaultAccessMethod {} {
@@ -1452,7 +1617,7 @@ proc getEditLinkBeginning {identifier} {
 		  href=\"[getActionURL]?$additionalQueryData&pageMode=metaSnippetsAction&action=editfolder_$identifier\">"
 	} else {
 		puts -nonewline "<a class=\"titlelink\"\
-		  href=\"[getActionURL]?$additionalQueryData&pageMode=metaSnippetsAction&action=edittopic_$identifier\">"
+		  href=\"[getActionURL]?$additionalQueryData&pageMode=metaSnippetsAction&action=editnote_$identifier\">"
 	}
 }
 
@@ -1460,7 +1625,7 @@ proc getExpandLinkBeginning {identifier} {
 	global additionalQueryData
 	logProcedureCall "getExpandLinkBeginning"
 	puts -nonewline "<a class=\"titlelink\"\
-	  href=\"[getActionURL]?pageMode=view&topic=$identifier&action=expand_$identifier&$additionalQueryData\">"
+	  href=\"[getActionURL]?pageMode=view&note=$identifier&action=expand_$identifier&$additionalQueryData\">"
 }
 
 proc getFilePrefix {} {
@@ -1480,6 +1645,11 @@ proc getFullPath {id} {
 	} else {
 		return "[getNoteName $id]"
 	}
+}
+
+proc getFullVersionNumber {} {
+	logProcedureCall "getFullVersionNumber"
+	return "[getCurrentVersionNumber]-[getCurrentReleaseNumber]"
 }
 
 proc getHeader {id} {
@@ -1590,7 +1760,7 @@ proc getLock {filename} {
 
 proc getLockTimeout {} {
 	logProcedureCall "getLockTimeout"
-	return [getConfigValue "lockTimeout" "20"]
+	return [getConfigValue "lockTimeout" "30"]
 }
 
 proc getMailerCommand {login} {
@@ -1655,6 +1825,7 @@ proc getOpenFolderIconFilename {} {
 	return "[getDocumentURL]/open_folder.gif"
 }
 
+# Not [getDocumentURL]/open_note.gif for reasons of backwards compatibility.
 proc getOpenNoteIconFilename {} {
 	logProcedureCall "getOpenNoteIconFilename"
 	return "[getDocumentURL]/open_topic.gif"
@@ -1690,7 +1861,8 @@ proc getPageMode {} {
 		"connect" -
 		"createLogin" -
 		"forgotPassword" -
-		"retrievePassword" {
+		"retrievePassword" -
+        "search" {
 			set pageModeResult $rawMode
 			return $pageModeResult
 		}
@@ -1783,21 +1955,20 @@ proc getPageMode {} {
 			updateDisplayedData
 			set action [CGIValue action]
 			switch -exact [CGIValue newfolder] {
-				newfolder_noop {
-				}
+				newfolder_noop -
 				"" {
 				}
 				default {
 					set action [CGIValue newfolder]
 				}
 			}
-			switch -exact [CGIValue newtopic] {
-				newtopic_noop {
+			switch -exact [CGIValue newnote] {
+				newnote_noop {
 				}
 				"" {
 				}
 				default {
-					set action [CGIValue newtopic]
+					set action [CGIValue newnote]
 				}
 			}
 			switch -regexp $action {
@@ -1813,8 +1984,13 @@ proc getPageMode {} {
 							set pageModeResult "editFolder"
 							return $pageModeResult
 						}
-						edittopic {
+						editnote {
 							set pageModeResult "editNote"
+							return $pageModeResult
+						}
+						hide {
+							hide $actionObject
+							set pageModeResult "view"
 							return $pageModeResult
 						}
 						newfolder {
@@ -1826,7 +2002,7 @@ proc getPageMode {} {
 								return $pageModeResult
 							}
 						}
-						newtopic {
+						newnote {
 							if {$actionObject == "top"} {
 								set pageModeResult "newNote"
 								return $pageModeResult
@@ -1835,6 +2011,11 @@ proc getPageMode {} {
 								return $pageModeResult
 							}
 						}
+						show {
+							show $actionObject
+							set pageModeResult "view"
+							return $pageModeResult
+						}
 						default {
 							set pageModeResult "view"
 							return $pageModeResult
@@ -1842,6 +2023,7 @@ proc getPageMode {} {
 					}
 				}
 				{^accountManagement$} -
+				{^administrative$} -
 				{^metaSnippets$} -
 				{^newFolder$} -
 				{^newSubFolder$} -
@@ -1918,12 +2100,14 @@ proc getPasswordFilename {} {
 }
 
 proc getProgramMode {} {
+    logProcedureCall "getProgramMode"
 	#return "snippets"
 	#return "sidebar"
 	return "MagicNotebook"
 }
 
 proc getProgramName {} {
+    logProcedureCall "getProgramName"
 	switch [getProgramMode] {
 		MagicNotebook {
 			return "Magic Notebook"
@@ -1938,6 +2122,7 @@ proc getProgramName {} {
 }
 
 proc getProgramNameWithArticle {} {
+    logProcedureCall "getProgramNameWithArticle"
 	switch [getProgramMode] {
 		MagicNotebook {
 			return "the Magic Notebook"
@@ -1949,20 +2134,62 @@ proc getProgramNameWithArticle {} {
 }
 
 proc getProgramNameWithCapitalizedArticle {} {
+    logProcedureCall "getProgramNameWithCapitalizedArticle"
 	switch [getProgramMode] {
 		MagicNotebook {
 			return "The Magic Notebook"
 		}
 		default {
-		return [getProgramName]
+            return [getProgramName]
 		}
 	}
+}
+
+proc getVisitorsIP {} {
+	global env
+    logProcedureCall "getVisitorsIP"
+	return [removeShellMetacharacters $env(REMOTE_ADDR)]
+}
+
+# Presently uses AND logic and searches note text and titles but not rotating
+# text.
+
+proc getSearchResults {} {
+    global metadata
+    logProcedureCall "getSearchResults"
+    set splitQuery [split [CGIValue "searchQuery"] " "]
+    set unsorted {}
+    foreach currentPacked $metadata {
+        array set currentUnpacked $currentPacked
+        if {[isNote $currentUnpacked(identifier)]} {
+            set isMatch 1
+            foreach queryItem $splitQuery {
+                if {!([string last [string tolower $queryItem] \
+                  [string tolower $currentUnpacked(title)]] != -1 || \
+                  [string last [string tolower $queryItem] \
+                  [string tolower $currentUnpacked(header)]] != -1)} {
+                    set isMatch 0
+                }
+            }
+            if {$isMatch && ![hasHiddenAncestor \
+              $currentUnpacked(identifier)]} {
+                lappend unsorted $currentPacked
+            }
+        }
+    }
+    set sorted [sortMetadataInner $unsorted "fullPathname"]
+    set result {}
+    foreach currentPacked $sorted {
+        array set currentUnpacked $currentPacked
+        lappend result $currentUnpacked(identifier)
+    }
+    return $result
 }
 
 proc getSelectedEntity {} {
 	global metadata
 	logProcedureCall "getSelectedEntity"
-	#return [CGIValue topic]
+	#return [CGIValue note]
 	foreach currentPacked $metadata {
 		array set currentUnpacked $currentPacked
 		if {[testFlag $currentUnpacked(flags) "selected"]} {
@@ -1982,9 +2209,14 @@ proc getShadowIconFilename {} {
 	return "[getDocumentURL]/shadow.gif"
 }
 
-proc getSnippetFilename {topic} {
+proc getSnippetFilename {note} {
 	logProcedureCall "getSnippetFilename"
-	return [concat [getFilePrefix]/users/[getUserName]/$topic]
+	return [concat [getFilePrefix]/users/[getUserName]/$note]
+}
+
+proc getTextHeight {} {
+	logProcedureCall "getTextHeight"
+	return [getConfigValue "textHeight" "10"]
 }
 
 proc getTextWidth {} {
@@ -1993,8 +2225,24 @@ proc getTextWidth {} {
 }
 
 proc getUserMetadataFilename {userId} {
+	global shouldSortMetadata
 	logProcedureCall "getUserMetadataFilename"
-	return [concat [getFilePrefix]/users/$userId/metadata]
+	if {[CGIValue "accessMethod"] == "guest" || [CGIValue "login"] == "guest"} {
+		if { \
+			! ( [file exists\
+			"[getFilePrefix]/users/guest/metadata-[getVisitorsIP]"] ) ||\
+			( [expr [file mtime "[getFilePrefix]/users/guest/metadata"] >\
+			[file mtime\
+			"[getFilePrefix]/users/guest/metadata-[getVisitorsIP]"]] ) \
+			} {
+			file copy -force [concat [getFilePrefix]/users/guest/metadata]\
+				[concat [getFilePrefix]/users/guest/metadata-[getVisitorsIP]]
+		}
+		set shouldSortMetadata 1
+		return [concat [getFilePrefix]/users/guest/metadata-[getVisitorsIP]]
+	} else {
+		return [concat [getFilePrefix]/users/$userId/metadata]
+	}
 }
 
 proc getWideShadowIconFilename {} {
@@ -2003,6 +2251,7 @@ proc getWideShadowIconFilename {} {
 }
 
 proc getUserName {} {
+	global shouldSortMetadata
 	logProcedureCall "getUserName"
 	switch [getProgramMode] {
 		"sidebar" {
@@ -2017,6 +2266,7 @@ proc getUserName {} {
 						return [CGIValue effectiveUserId]
 					}
 					if {"[CGIValue switchUserId]" != ""} {
+						set shouldSortMetadata 1
 						if {"[CGIValue administrativeAction]" == "switchUser"} {
 							if {[userExists [CGIValue switchUserId]]} {
 								return [CGIValue switchUserId]
@@ -2089,6 +2339,28 @@ proc guardAgainstInvalidLogin {} {
 	}
 }
 
+proc hasHiddenAncestor {identifier} {
+    global metadata
+    logProcedureCall "hasHiddenAncestor"
+    set flags ""
+    set parent ""
+    foreach row $metadata {
+        array set current $row
+        if {$current(identifier) == $identifier} {
+            set flags $current(flags)
+            set parent $current(parent)
+        }
+    }
+    if {[testFlag $flags "hide"]} {
+        return 1
+    } elseif {$identifier == "top" || $identifier == "" || $parent == "top" \
+      || $parent == ""} {
+        return 0
+    } else {
+        return [hasHiddenAncestor $parent]
+    }
+}
+
 proc hide {id} {
 	global metadata
 	logProcedureCall "hide"
@@ -2108,7 +2380,11 @@ proc initialize {} {
 	global administrativeActionResult
 	global collapsedObject
 	global configOptions
+	global contentTypeGiven
+	global currentReleaseNumber
+	global currentVersionNumber
 	global debugMode
+	global lastClockClicks
 	global lockedFiles
 	global metadataRead
 	global metadataWritten
@@ -2128,9 +2404,13 @@ proc initialize {} {
 	logProcedureCall "initialize"
 	 debugLog "Starting processing..."
 	set administrativeActionResult ""
+	set lastClockClicks [clock clicks]
 	set metadataRead 0
 	set metadataWritten 0
 	set collapsedObject ""
+	set contentTypeGiven 0
+	set currentVersionNumber "1.4"
+	set currentReleaseNumber "1"
 	set lockedFiles {}
 	set pageModeHasBeenCalled 0
 	set passwordsRead 0
@@ -2139,6 +2419,7 @@ proc initialize {} {
 	set userNotifiedOfLock 0
 	set configOptions {\
 		"actionURL"\
+		"cellpadding"\
 		"defaultAccessMethod"\
 		"defaultDisplayMethod"\
 		"documentURL"\
@@ -2152,6 +2433,7 @@ proc initialize {} {
 		"shouldAllowLoginAccess"\
 		"shouldAllowLoginCreation"\
 		"shouldAllowWikiAccess"\
+		"textHeight"\
 		"textWidth"\
 		}
 	set additionalQueryData ""
@@ -2159,6 +2441,7 @@ proc initialize {} {
 	expr srand([clock clicks])
 	puts "Content-type: text/html"
 	puts ""
+	set contentTypeGiven 1
 	CGIParse
 	loadConfigFile [getConfigFilename]
 	readPasswords
@@ -2178,13 +2461,13 @@ proc initialize {} {
 	if {[CGIValue accessMethod] == "guest"} {
 		registerQueryData "accessMethod" "guest"
 	}
-	if {[CGIValue topic] != ""} {
-		saveSelectedNote [CGIValue topic]
+	if {[CGIValue note] != ""} {
+		saveSelectedNote [CGIValue note]
 	}
 	if {[CGIValue shouldsave] == "yes"} {
 		saveSubmittedChanges
 	}
-	debugLog [CGIQuery]
+	logMessage [CGIQuery]
 	if {([CGIValue newLogin] == "") && ((![userExists [getUserName]]) ||\
 	  ([shouldAuthenticate] && ![authenticate]))} {
 		pageStart 0
@@ -2206,7 +2489,7 @@ proc initialize {} {
 	releaseLock [getMetadataFilename]
 }
 
-proc isActive {topic} {
+proc isActive {note} {
 	global metadata
 	logProcedureCall "isActive"
 	set index 0
@@ -2216,7 +2499,7 @@ proc isActive {topic} {
 		if {$index >= [llength $metadata]} {
 			set shouldContinue 0
 		} else {
-			if {$currentRow(identifier) == $topic} {
+			if {$currentRow(identifier) == $note} {
 				switch -regexp -- $currentRow(flags) {
 					show {
 						return 1
@@ -2322,6 +2605,11 @@ proc isProperDescendant {potentialChild potentialParent} {
 	return [isProperAncestor $potentialParent $potentialChild]
 }
 
+proc isSiblingOfAncestor {potentialSiblingOfAncestor node} {
+    logProcedureCall "isSiblingOfAncestor"
+    return [isAncestor [getParent $potentialSiblingOfAncestor] $node]
+}
+
 proc isTrue {optionValue} {
 	logProcedureCall "isTrue"
 	switch [string tolower $optionValue] {
@@ -2401,7 +2689,6 @@ proc listUsers {} {
 		checked> Return to the administrative menu.</p>\n\
 		<p><input type=\"image\" name=\"Go!\"\ border=\"0\"
 		src=\"[getDocumentURL]/submit.jpg\"></p>\n"
-	#displayStandardChoices
 }
 
 proc logMessage {message} {
@@ -2457,7 +2744,7 @@ proc mightBeUsedInFilename {variableName} {
 		"^resetUserFromTextOnlyUserId$" -
 		"^revokeAdministrativePrivelegesUserId$" -
 		"^setUserToTextOnlyUserId$" -
-		"^topic$" -
+		"^note$" -
 		"^unlockUserId$" -
 		default {
 			return 1
@@ -2569,23 +2856,30 @@ proc pageStart {{preserveLogin 1}} {
 }
 
 proc panic {} {
+	global contentTypeGiven
 	global lockedFiles
 	logProcedureCall "panic"
 	while {[llength $lockedFiles] > 0} {
 		releaseLock [lindex $lockedFiles 0]
 	}
-	readFile [concat [getFilePrefix]/general/header]
-	puts "<h1>Sorry...</h1>"
+	if { ! $contentTypeGiven } {
+		puts "Content-type: text/html"
+		puts ""
+	}
+	# Commented out as causing an infinite loop.
+	#readFile [concat [getFilePrefix]/general/header]
+	puts "<html><head><title>Sorry...</title><body bgcolor=\"white\">\
+		<h1>Sorry...</h1>"
 	puts "<p>An error has occured, and the program making these webpages can't\
 		recover from it. Please hit your browser's \"<strong>BACK</strong>\"\
-		button and choose another option.</p>"
-	pageEnd
+		button and choose another option.</p></body></html>"
+	#pageEnd
 	exit 1
 }
 
-proc printHeader {topic} {
+proc printHeader {note} {
 	logProcedureCall "printHeader"
-	puts "[filterText [removeComments [getHeader $topic]]]"
+	puts "[filterText [removeComments [getHeader $note]]]"
 }
 
 proc printInvalidLoginText {} {
@@ -2646,14 +2940,14 @@ proc printInvalidPasswordText {} {
 		src=\"[getDocumentURL]/submit.jpg\"></p>\n"
 }
 
-proc printNoteName {topic} {
+proc printNoteName {note} {
 	logProcedureCall "printNoteName"
-	puts "<h2>[getNoteName $topic]</h2>"
+	puts "<h2>[getNoteName $note]</h2>"
 }
 
-proc printSnippet {topic} {
+proc printSnippet {note} {
 	logProcedureCall "printSnippet"
-	puts "[filterText [removeComments [selectSnippet $topic]]]"
+	puts "[filterText [removeComments [selectSnippet $note]]]"
 }
 
 proc processAccountManagement {} {
@@ -2701,13 +2995,13 @@ proc processAccountManagement {} {
 		}
 		"modifyEditSnippetStatus" {
 			if {[isTrue [CGIValue editSnippets]]} {
-				setUserFlag [getUserName] "editview"
+				setUserFlag [getUserName] "editsnippets"
 				set accountManagementResult "<p><strong>You can now add random\
-				  text to topics.</strong></p>"
+				  text to notes.</strong></p>"
 			} else {
-				clearUserFlag [getUserName] "editview"
+				clearUserFlag [getUserName] "editsnippets"
 				set accountManagementResult "<p><strong>When you edit a\
-				  topic, you won't be bothered with controls to add random\
+				  note, you won't be bothered with controls to add random\
 				  text.</strong></p>"
 			}
 		}
@@ -2719,7 +3013,7 @@ proc processAccountManagement {} {
 					set postscript ""
 				} else {
 					set postscript "<p><strong><em>Clicking on the title of a\
-						topic or folder will let you edit it. This is needed\
+						note or folder will let you edit it. This is needed\
 						so that you will have a way to access other\
 						pages.</em></strong></p>"
 				}
@@ -2740,11 +3034,11 @@ proc processAccountManagement {} {
 			if {[isTrue [CGIValue editLinks]]} {
 				setUserFlag [getUserName] "editlink"
 				set accountManagementResult "<p><strong>Clicking on the name of
-				  a topic will now edit it.</strong></p>"
+				  a note will now edit it.</strong></p>"
 			} else {
 				clearUserFlag [getUserName] "editlink"
 				set accountManagementResult "<p><strong>Clicking on the\
-					name of a topic will now open or close\
+					name of a note will now open or close\
 					it.</strong></p>"
 				if {[testUserFlag [getUserName] "hide_menu_from_view_page"]} {
 					clearUserFlag [getUserName] "hide_menu_from_view_page"
@@ -2757,16 +3051,16 @@ proc processAccountManagement {} {
 			}
 		}
 		"modifySeeAllSnippetsStatus" {
-			if {[isTrue [CGIValue see_all_snippets]]} {
-				setUserFlag [getUserName] "seeAllSnippets"
+			if {[isTrue [CGIValue seeAllSnippets]]} {
+				setUserFlag [getUserName] "see_all_snippets"
 				set accountManagementResult "<p><strong>You will now see all\
-					bits of random text in a given topic. (Note that some\
-					topics will not have random text.)</strong></p>"
+					bits of random text in a given note. (Note that some\
+					notes will not have random text.)</strong></p>"
 			} else {
-				clearUserFlag [getUserName] "seeAllSnippets"
-				set accountManagementResult "<p><strong>You will now see one\
-					piece of random text in a given topic if it has random\
-					text. (Note that some topics will not have random\
+				clearUserFlag [getUserName] "see_all_snippets"
+				set accountManagementResult "<p><strong>You will now see only\
+					one piece of random text in a given note if it has random\
+					text. (Note that some notes will not have random\
 					text.)</strong></p>"
 			}
 		}
@@ -2903,7 +3197,7 @@ proc readMetadata {{shouldForce 0}} {
 	global metadata
 	global metadataRead
 	logProcedureCall "readMetadata"
-	if {$metadataRead && !$shouldForce} {
+	if {($metadataRead && !$shouldForce) || !([userExists [getUserName]])} {
 		return
 	}
 	set metadata [readUserMetadata [getUserName] $shouldForce]
@@ -2966,7 +3260,7 @@ proc readNextField {fileId} {
 
 proc readNote {filename} {
 	logProcedureCall "readNote"
-	global topics
+	global notes
 	if {[getProgramMode] == "MagicNotebook" && [testMetadataFlag $filename\
 	  "folder"]} {
 		# We don't display this way.
@@ -2975,7 +3269,7 @@ proc readNote {filename} {
 	set result {}
 	set fullFilename "[getFilePrefix]/users/[getUserName]/$filename"
 	if { [catch {open $fullFilename r} fileId] } {
-		# The topic has just been deleted or is otherwise available.
+		# The note has just been deleted or is otherwise available.
 		return {}
 	} else {
 		set shouldContinue 1
@@ -3217,9 +3511,9 @@ proc saveSubmittedChanges {} {
 	logProcedureCall "saveSubmittedChanges"
 	readMetadata
 	set previous [CGIValue previousPageMode]
-	set topic [CGIValue topic]
-	getLock "[getFilePrefix]/users/[getUserName]/$topic"
-	set topicContents [readNote $topic]
+	set note [CGIValue note]
+	getLock "[getFilePrefix]/users/[getUserName]/$note"
+	set noteContents [readNote $note]
 	set shouldSortMetadata 0
 	foreach key [CGIKeys] {
 		switch -regexp $key {
@@ -3263,35 +3557,35 @@ proc saveSubmittedChanges {} {
 			{^value_(.*)_(.*?)$} {
 				regexp {^(.*?)_(.*)_(.*?)$} $key match prefix id position
 				if { [CGIValue $key] != ""} {
-					if {$position < [llength $topicContents]} {
-						set topicContents [lreplace $topicContents $position\
+					if {$position < [llength $noteContents]} {
+						set noteContents [lreplace $noteContents $position\
 							$position [CGIValue $key]]
 					} else {
-						lappend topicContents [CGIValue $key]
+						lappend noteContents [CGIValue $key]
 					}
 				} else {
-					if {$position < [llength $topicContents]} {
-						set topicContents [lreplace $topicContents $position\
+					if {$position < [llength $noteContents]} {
+						set noteContents [lreplace $noteContents $position\
 							$position [getDeletionMarker]]
 					}
 				}
 			}
 			{^delete_(.*)$} {
 				regexp {^(.*?)_(.*)_(.*?)$} $key match prefix id sequence
-				set topicContents [lreplace $topicContents $position\
+				set noteContents [lreplace $noteContents $position\
 					$position [getDeletionMarker]]
 			}
 		}
 	}
-	for {set index 0} {$index < [llength $topicContents]} {} {
-		if { [lindex $topicContents $index] == [getDeletionMarker]} {
-			set topicContents [lreplace $topicContents $index $index]
+	for {set index 0} {$index < [llength $noteContents]} {} {
+		if { [lindex $noteContents $index] == [getDeletionMarker]} {
+			set noteContents [lreplace $noteContents $index $index]
 		} else {
 			incr index
 		}
 	}
-	writeNote $topic $topicContents
-	releaseLock "[getFilePrefix]/users/[getUserName]/$topic"
+	writeNote $note $noteContents
+	releaseLock "[getFilePrefix]/users/[getUserName]/$note"
 }
 
 proc selectNote {identifier} {
@@ -3319,11 +3613,19 @@ proc selectNote {identifier} {
 	}
 }
 
-proc selectSnippet {topic} {
+proc selectSnippet {note} {
 	logProcedureCall "selectSnippet"
-	set topicContents [readNote $topic]
-	set topicIndex [expr int( rand() * [llength $topicContents] ) ]
-	return [lindex $topicContents $topicIndex]
+	set noteContents [readNote $note]
+	if {[testUserFlag [getUserName] "see_all_snippets"]} {
+		set result "\n"
+		foreach {currentSnippet} $noteContents {
+			set result "$result$currentSnippet\n\n"
+		}
+		return $result
+	} else {
+		set noteIndex [expr int( rand() * [llength $noteContents] ) ]
+		return [lindex $noteContents $noteIndex]
+	}
 }
 
 proc setFlag {target flag} {
@@ -3400,7 +3702,7 @@ proc shouldAuthenticate {} {
 	logProcedureCall "shouldAuthenticate"
 	switch -- [CGIValue previousPageMode] {
 		createLogin {
-			if {[CGIValue login] == "" && [CGIValue password == ""]} {
+			if {[CGIValue login] == "" && [CGIValue password] == ""} {
 				return 0
 			}
 		}
@@ -3449,8 +3751,8 @@ proc show {id} {
 
 proc showMagicNotebook {} {
 	logProcedureCall "showMagicNotebook"
-	if {[getPageMode] == "metaSnippets"} {
-		tablelessDisplayForParent "top"
+	if {[getProgramMode] == "metaSnippets"} {
+		editDisplayForParent "top"
 	} else {
 		displayForParent "top"
 	}
@@ -3458,13 +3760,13 @@ proc showMagicNotebook {} {
 
 proc showSnippets {} {
 	logProcedureCall "showSnippets"
-	foreach {topic} [getNotes] {
-		if {[isActive $topic]} {
+	foreach {note} [getNotes] {
+		if {[isActive $note]} {
 			if {[getProgramMode] != "sidebar"} {
-				printNoteName $topic
+				printNoteName $note
 			}
-			printHeader $topic
-			printSnippet $topic
+			printHeader $note
+			printSnippet $note
 		}
 	}
 }
@@ -3478,7 +3780,7 @@ proc showTemplates {} {
 			set shouldAddBreak 0
 			foreach current $templateMetadata {
 				array set currentRow $current
-				if {![topicExists $currentRow(identifier)]} {
+				if {![noteExists $currentRow(identifier)]} {
 					if {$shouldAddBreak} {
 						puts -nonewline "<br>\n"
 					}
@@ -3504,7 +3806,7 @@ proc sortMetadata {} {
 	}
 }
 
-proc sortMetadataInner {toSort {criterionToSortOn "topicName"}} {
+proc sortMetadataInner {toSort {criterionToSortOn "itemName"}} {
 	debugLog "sortMetadataInner"
 	# Randomized QuickSort implemented after bubble sort took too long.
 	# We append the internal name to the external key so the output
@@ -3520,11 +3822,11 @@ proc sortMetadataInner {toSort {criterionToSortOn "topicName"}} {
 	set greaterOrEqualBin {}
 	switch $criterionToSortOn {
 		fullPathname {
-			set dividingFieldToCompare [getFullPath $dividingKey]
+			set dividingFieldToCompare [string tolower [getFullPath $dividingKey]]
 		}
-		topicName -
+		itemName -
 		default {
-			set dividingFieldToCompare [getNoteName $dividingKey]
+			set dividingFieldToCompare [string tolower [getNoteName $dividingKey]]
 		}
 	}
 	foreach current $toSort {
@@ -3532,11 +3834,11 @@ proc sortMetadataInner {toSort {criterionToSortOn "topicName"}} {
 		set currentKey $currentKeyRow(identifier)
 		switch $criterionToSortOn {
 			fullPathname {
-				set currentFieldToCompare [getFullPath $currentKey]
+				set currentFieldToCompare [string tolower [getFullPath $currentKey]]
 			}
-			topicName -
+			itemName -
 			default {
-				set currentFieldToCompare [getNoteName $currentKey]
+				set currentFieldToCompare [string tolower [getNoteName $currentKey]]
 			}
 		}
 		# Sort on displayed field value, using the key as a tiebreaker
@@ -3558,87 +3860,6 @@ proc sortMetadataInner {toSort {criterionToSortOn "topicName"}} {
 	}
 	return [concat [sortMetadataInner $lesserBin $criterionToSortOn]\
 		[sortMetadataInner $greaterOrEqualBin $criterionToSortOn]]
-}
-
-proc tablelessDisplayForParent {parentName {htmlPrefix ""}} {
-	logProcedureCall "displayForParent"
-	foreach field [getWithParent $parentName] {
-		if {[testMetadataFlag $field "show"] || \
-		  [getPageMode] == "metaSnippets"} {
-			if {[getPageMode] == "view" || [getPageMode] == "connect" || \
-				[CGIValue pageMode] == "createLogin"} {
-				if {[testMetadataFlag $field "expand"]} {
-					puts -nonewline "$htmlPrefix[getCollapseLinkBeginning\
-					  $field]"
-					if {[testMetadataFlag $field "folder"]} {
-						puts "<img src=\"[getOpenFolderIconFilename]\"\
-						  border=\"0\" alt=\"\"></a>"
-					} else {
-						puts "<img src=\"[getOpenNoteIconFilename]\"\
-						  border=\"0\" alt=\"\"></a>"
-					}
-				} else {
-					puts -nonewline "$htmlPrefix[getExpandLinkBeginning\
-					  $field]"
-					if {[testMetadataFlag $field "folder"]} {
-						puts "<img src=\"[getClosedFolderIconFilename]\"\
-						  border=\"0\" alt=\"\"></a>"
-					} else {
-						puts "<img src=\"[getClosedNoteIconFilename]\"\
-						  border=\"0\" alt=\"\"></a>"
-					}
-				}
-				if {[testUserFlag [getUserName] "editlink"]} {
-					puts -nonewline "$htmlPrefix[getEditLinkBeginning\
-					  $field]"
-				} else {
-					if {[testMetadataFlag $field "expand"]} {
-						puts -nonewline\
-						  "$htmlPrefix[getCollapseLinkBeginning $field]"
-					} else {
-						puts -nonewline\
-						  "$htmlPrefix[getExpandLinkBeginning $field]"
-					}
-				}
-			} else {
-				puts -nonewline "$htmlPrefix[getEditLinkBeginning $field]"
-			}
-			puts "$htmlPrefix[getOpenNoteNameTag][getNoteName $field][getCloseNoteNameTag]</a>"
-			if {[testMetadataFlag $field "expand"] || [getPageMode] ==
-			"metaSnippets"} {
-				if {[getPageMode] == "metaSnippets"} {
-					puts "$htmlPrefix<table border=\"0\" cellspacing=\"0\"\
-						cellpadding=\"0\"><tr><td height=\"1\"\
-						width=\"100%\" colspan=\"2\"> </td></tr>\
-						<tr><td> <img\
-						src=\"[getWideShadowIconFilename]\" border=\"0\"></td>"
-				} else {
-					puts "$htmlPrefix<table border=\"0\" cellspacing=\"0\"\
-						cellpadding=\"0\"><tr><td height=\"1\"\
-						width=\"100%\" colspan=\"2\"> </td></tr>\
-						<tr><td> <img\
-						src=\"[getShadowIconFilename]\" border=\"0\"></td>"
-				}
-				if {[testMetadataFlag $field "expand"] || \
-				  [getPageMode] == "metaSnippets"} {
-					if {[testMetadataFlag $field "folder"]} {
-						puts -nonewline "$htmlPrefix<td>"
-						tablelessDisplayForParent $field "	$htmlPrefix"
-						puts -nonewline "</td>"
-					} else {
-						if {[getPageMode] != "metaSnippets" && \
-						  [getPageMode] != "metaSnippetsAction"} {
-							puts -nonewline "$htmlPrefix<td>"
-							printHeader $field
-							printSnippet $field
-							puts -nonewline "</td>"
-						}
-					}
-				}
-				puts "$htmlPrefix</tr></table>"
-				}
-		}
-	}
 }
 
 proc testFlag {target flags} {
@@ -3693,6 +3914,22 @@ proc textToHtml {text} {
 	return [lineBreaksToHtml [quoteHtmlMetacharacters $text]]
 }
 
+proc timeMarker {{text ""}} {
+	global lastClockClicks
+	logProcedureCall "timeMarker"
+	# The number of clock clicks per second depends on the computer and should
+	# be calibrated to get meaningful output.
+	set currentClockClicks [clock clicks]
+	if {$text != ""} {
+		logMessage "********** clicks elapsed [expr $currentClockClicks -\
+			$lastClockClicks]; message $text"
+	} else {
+		logMessage "********** clicks elapsed [expr $currentClockClicks -\
+			$lastClockClicks]"
+	}
+	set lastClockClicks $currentClockClicks
+}
+
 # Will only take effect in debug mode.
 proc turnOffProcedureCallLogging {} {
 	global shouldLogProcedureCalls
@@ -3715,17 +3952,17 @@ proc updateDisplayedData {} {
 	logProcedureCall "updateDisplayedData"
 	readMetadata
 	set action [CGIValue action]
-	set topicbookMove [CGIValue topicbookMove]
-	if {$topicbookMove == ""} {
-		set topicbookMove [CGIValue motion]
+	set notebookMove [CGIValue notebookMove]
+	if {$notebookMove == ""} {
+		set notebookMove [CGIValue motion]
 	}
-	switch -regexp $topicbookMove {
+	switch -regexp $notebookMove {
 		{^(.*?)_(.*?)_(.*)$} {
-			regexp {^(.*?)_(.*?)_(.*)$} $topicbookMove match moveLikeCommand item \
+			regexp {^(.*?)_(.*?)_(.*)$} $notebookMove match moveLikeCommand item \
 			  destination
 			switch -exact -- $moveLikeCommand {
 				motion -
-				topicbookMove {
+				notebookMove {
 					for {set index 0} {$index < [llength $metadata]} \
 					  {incr index} {
 						array set current [lindex $metadata $index]
@@ -3753,7 +3990,7 @@ proc updateDisplayedData {} {
 					set shouldExpandAppropriately 0
 					deleteFolder $actionObject
 				}
-				deletetopic {
+				deletenote {
 					set shouldExpandAppropriately 0
 					deleteNote $actionObject
 				}
@@ -3826,7 +4063,7 @@ proc writeMetadata {{shouldForce 0}} {
 	logProcedureCall "writeMetadata"
 	if {$metadataRead && ($shouldForce || !$metadataWritten)} {
 		set metadataWritten 1
-		if { [catch {open [getMetadataFilename].new w} fileId] } {
+		if { [catch {open "[getMetadataFilename].new-[getVisitorsIP]" w} fileId] } {
 			logMessage "Couldn't open file [getMetadataFilename]. Exiting from writeMetadata... $fileId"
 			panic
 		} else {
@@ -3851,37 +4088,39 @@ proc writeMetadata {{shouldForce 0}} {
 				incr index
 			}
 			close $fileId
-			file rename -force [getMetadataFilename].new [getMetadataFilename]
+			file rename -force "[getMetadataFilename].new-[getVisitorsIP]" [getMetadataFilename]
 		}
 	}
 }
 
-proc writeNote {topicID topicContents} {
+proc writeNote {noteID noteContents} {
 	logProcedureCall "writeNote"
-	if { [set error [catch {open "[getSnippetFilename $topicID]" w} fileId]] } {
-		logMessage "Couldn't open file [getSnippetFilename $topicID] for writing.  Exiting from writeNote... $error $fileId"
+	if { [set error [catch {open "[getSnippetFilename\
+		$noteID].new-[getVisitorsIP]" w} fileId]] } {
+		logMessage "Couldn't open file [getSnippetFilename $noteID].new-[getVisitorsIP] for writing.  Exiting from writeNote... $error $fileId"
 		panic
 	} else {
 		set index 0
 		set shouldContinue 1
 		while {$shouldContinue} {
-			if {$index >= [llength $topicContents]} {
+			if {$index >= [llength $noteContents]} {
 				set shouldContinue 0
 			} else {
-				set current [lindex $topicContents $index]
+				set current [lindex $noteContents $index]
 				writeString $fileId $current
 				puts $fileId ""
 			}
 			incr index
 		}
-		close $fileId
+	 	close $fileId
+		file rename -force "[getSnippetFilename $noteID].new-[getVisitorsIP]" [getSnippetFilename $noteID]
 	}
 }
 
 proc writePasswords {} {
 	global passwords
 	logProcedureCall "writePasswords"
-	if { [catch {open [getPasswordFilename] w} fileId] } {
+	if { [catch {open "[getPasswordFilename].new-[getVisitorsIP]" w} fileId] } {
 		logMessage "Couldn't open file [getPasswordFilename]. Exiting from writePasswords... $fileId"
 		panic
 	} else {
@@ -3904,6 +4143,7 @@ proc writePasswords {} {
 			incr index
 		}
 		close $fileId
+		file rename -force "[getPasswordFilename].new-[getVisitorsIP]" [getPasswordFilename]
 	}
 }
 
@@ -3939,6 +4179,14 @@ switch -exact [getPageMode] {
 			puts -nonewline "<input type=\"hidden\" name=\"pageMode\"\
 				value=\"accountManagement\">\n\
 				<h2>Account Management</h2>\n\
+				<p><strong><em>To change one of these settings, click the\
+				button to the left of that setting, then make the change just\
+				below, and click \"Go!\"</em></strong></p>\
+				<p><strong>For example, to keep notes and folders\
+				open, click \"Do you want [getProgramNameWithArticle] to clean\
+				up notes you're not using?\", and then \"Keep notes and\
+				folders open until I close them.\", and then\
+				\"Go!\"</strong></p>\n\
 				<p><strong>On this form, radio buttons (used for selection) do\
 				not submit by themselves.  You will need to press the submit\
 				button at the bottom of the screen.</strong></p>\n"
@@ -3948,58 +4196,59 @@ switch -exact [getPageMode] {
 					size=\"+1\">$accountManagementResult</font>"
 			}
 			puts -nonewline ""
+			puts -nonewline "<hr>\n"
 			puts -nonewline "<p><br><input type=\"radio\"\
 				name=\"accountManagement\" value=\"changePassword\">\
 				Change my password.<\p>\n\
 				<blockquote>\n\
 				<p>Old password:<br>\n\
 				<input type=\"password\" name=\"changePasswordOld\"\
-				size=\"[getTextWidth]\"><br>\n\
+				size=\"[expr [getTextWidth] - 10]\"><br>\n\
 				New password:<br>\n\
 				<input type=\"password\" name=\"changePasswordNew\"\
-				size=\"[getTextWidth]\"><br>\n\
+				size=\"[expr [getTextWidth] - 10]\"><br>\n\
 				Repeat new password:<br>\n\
 				<input type=\"password\" name=\"changePasswordDuplicate\"\
-				size=\"[getTextWidth]\"></p>\n\
-				<font size=\"-4\"><br></font></blockquote>\n"
+				size=\"[expr [getTextWidth] - 10]\"></p>\n"
+			puts -nonewline "</blockquote><hr>\n"
 			puts -nonewline "\
 				<p><input type=\"radio\" name=\"accountManagement\"
 				value=\"modifyConciseness\"> Do you want\
-				[getProgramNameWithArticle] to clean up topics you're not\
+				[getProgramNameWithArticle] to clean up notes you're not\
 				using?</p>\
 				<blockquote>"
 			if {[testUserFlag [getUserName] "concise"]} {
 				puts -nonewline "\
 					<p><input type=\"radio\" checked\
 					name=\"conciseDisplay\" value=\"yes\"> Close\
-					folders and topics I am not using.<br>\
+					folders and notes I am not using.<br>\
 					<input type=\"radio\" name=\"conciseDisplay\"\
-					value=\"no\"> Keep topics and folders open\
+					value=\"no\"> Keep notes and folders open\
 					until I close them.</p>"
 			} else {
 				puts -nonewline "\
 					<p><input type=\"radio\"\
 					name=\"conciseDisplay\" value=\"yes\"> Close\
-					folders and topics I am not using.<br>\
+					folders and notes I am not using.<br>\
 					<input type=\"radio\" checked name=\"conciseDisplay\"\
-					value=\"no\"> Keep topics and folders open\
+					value=\"no\"> Keep notes and folders open\
 					until I close them.</p>"
 			}
-			puts -nonewline "<font size=\"-4\"><br></font></blockquote>\n"
+			puts -nonewline "</blockquote><hr>\n"
 			if {[getProgramMode] == "MagicNotebook"} {
 				puts -nonewline "\
 					<p><input type=\"radio\" name=\"accountManagement\"\
 					value=\"modifyLinkStatus\"> When you are viewing\
 					information, what do you want to happen when you click\
-					on the name of a topic or folder?</p>\n\
+					on the name of a note or folder?</p>\n\
 					<blockquote>"
 				if {[testUserFlag [getUserName] "editlink"]} {
 					puts -nonewline "\
 						<p><input type=\"radio\" checked\
 						name=\"editLinks\" value=\"yes\"> When I click
-						on a topic/folder name, I want to edit it.<br>\
+						on a note/folder name, I want to edit it.<br>\
 						<input type=\"radio\" name=\"editLinks\"\
-						value=\"no\"> When I click on a topic/folder
+						value=\"no\"> When I click on a note/folder
 						name, I want to open or close it. <em>If you choose
 						this, the menu will always be displayed from the front
 						page so that you can get to other pages.</em></p>"
@@ -4007,26 +4256,26 @@ switch -exact [getPageMode] {
 					puts -nonewline "\
 						<p><input type=\"radio\"\
 						name=\"editLinks\" value=\"yes\"> When I click
-						on a topic/folder name, I want to edit it.<br>\
+						on a note/folder name, I want to edit it.<br>\
 						<input type=\"radio\" checked name=\"editLinks\"\
-						value=\"no\"> When I click on a topic/folder name, I\
+						value=\"no\"> When I click on a note/folder name, I\
 						want to open or close it.</p>"
 				}
 			}
-			puts -nonewline "<font size=\"-4\"><br></font></blockquote>\n"
+			puts -nonewline "</blockquote><hr>\n"
 			puts -nonewline "\
 				<p><input type=\"radio\" name=\"accountManagement\"\
-				value=\"modifyEditSnippetStatus\"> When you edit a topic, do\
-				you want be able to make different things appear randomly at\
-				the bottom of the topic? <em>This will make the topic-editing\
-				page more complicated.</em></p>\n\
+				value=\"modifyEditSnippetStatus\"> When you edit a note, do\
+				you want be able to add random text to notes that don't have\
+				it? <em>This will make the note-editing page more\
+				complicated.</em></p>\n\
 				<blockquote>"
-			if {[testUserFlag [getUserName] "editview"]} {
+			if {[testUserFlag [getUserName] "editsnippets"]} {
 				puts -nonewline "\
 					<p><input type=\"radio\" checked\
 					name=\"editSnippets\" value=\"yes\"> I want to be\
 					able to make random text appear at the bottom of the\
-					topic.<br>\
+					note.<br>\
 					<input type=\"radio\" name=\"editSnippets\"\
 					value=\"no\"> I would rather have the editing pages be\
 					simpler.</p>"
@@ -4035,12 +4284,12 @@ switch -exact [getPageMode] {
 					<p><input type=\"radio\"\
 					name=\"editSnippets\" value=\"yes\"> I want to be\
 					able to make random text appear at the bottom of the\
-					topic.<br>\
+					note.<br>\
 					<input type=\"radio\" name=\"editSnippets\" checked\
 					value=\"no\"> I would rather have the editing pages be\
 					simpler.</p>"
 			}
-			puts -nonewline "<font size=\"-4\"><br></font></blockquote>\n"
+			puts -nonewline "</blockquote><hr>\n"
 			puts -nonewline "\
 				<p><input type=\"radio\" name=\"accountManagement\"\
 				value=\"modifySeeAllSnippetsStatus\"> Would you like all\
@@ -4051,21 +4300,22 @@ switch -exact [getPageMode] {
 				puts -nonewline "\
 					<p><input type=\"radio\" name=\"seeAllSnippets\"
 					value=\"yes\" checked> I want to see all of the random text
-					that is available for the selected topic.<br>\
+					that is available for the selected note.<br>\
 					<input type=\"radio\" name=\"seeAllSnippets\"\
 					value=\"no\"> If there is random text, I want to see one\
-					part at a time. <em>This is the normal way to use "
+					part at a time. <em>This is the normal way to use\
+					[getProgramNameWithArticle].</em></p>"
 			} else {
 				puts -nonewline "\
 					<p><input type=\"radio\" name=\"seeAllSnippets\"
 					value=\"yes\"> I want to see all of the random text
-					that is available for the selected topic.<br>\
+					that is available for the selected note.<br>\
 					<input type=\"radio\" name=\"seeAllSnippets\"\
 					value=\"no\" checked> If there is random text, I want to\
 					see one part at a time. <em>This is the normal way to use\
 					[getProgramNameWithArticle].</em></p>"
 			}
-			puts -nonewline "<font size=\"-4\"><br></font></blockquote>\n"
+			puts -nonewline "</blockquote><hr>\n"
 			puts -nonewline "<p><input type=\"radio\"\
 				name=\"accountManagement\"\
 				value=\"modifyHideMenuFromViewPageStatus\"> Would you like to\
@@ -4077,19 +4327,19 @@ switch -exact [getPageMode] {
 					<p><input type=\"radio\" name=\"hideMenuFromViewPage\"\
 					value=\"yes\" checked> Hide the standard navigation menu\
 					from the\
-					main viewing page. Only folders and topics will be\
+					main viewing page. Only folders and notes will be\
 					shown when you are looking at the main page. <em>If you
 					choose this, links will be edit links so you still have a
 					way to access other pages.</em><br>\
 					<input type=\"radio\" name=\"hideMenuFromViewPage\"\
 					value=\"no\"> Show the standard navigation menu from the\
-					viewing page. If you're not sure what option to select,\
-					this one would probably be best.</p>"
+					viewing page. <em>If you're not sure what option to\
+					select, this one would probably be best.</em></p>"
 			} else {
 				puts -nonewline "\
 					<p><input type=\"radio\" name=\"hideMenuFromViewPage\"\
 					value=\"yes\"> Hide the standard navigation menu from the\
-					main viewing page. Only folders and topics will be\
+					main viewing page. Only folders and notes will be\
 					shown, although the menu will be visible from other\
 					pages.<br>\
 					<input type=\"radio\" name=\"hideMenuFromViewPage\"\
@@ -4098,7 +4348,7 @@ switch -exact [getPageMode] {
 					viewing page. If you're not sure what option to select,\
 					this one would probably be best.</p>"
 			}
-			puts -nonewline "<font size=\"-4\"><br></font></blockquote>\n"
+			puts -nonewline "</blockquote><hr>\n"
 			puts -nonewline "\
 				<p><input type=\"radio\" name=\"accountManagement\"\
 				value=\"returnToSnippets\" checked>\
@@ -4111,7 +4361,16 @@ switch -exact [getPageMode] {
 		if {[isAdministrator [getUserName]]} {
 			puts -nonewline "<input type=\"hidden\" name=\"pageMode\"\
 				value=\"administrativeAction\">\n\
-				<h2>Administrative Utilities</h2>\n\
+				<h2>Administrative Utilities for\
+				[getProgramNameWithArticle], version\
+				[getCurrentVersionNumber], release\
+				[getCurrentReleaseNumber].</h2>\n\
+				<p><strong><em>To use one of these options, click the button\
+				to the left of that setting, then make the change just below,\
+				and click \"Go!\"</em></strong></p>\
+				<p><strong>For example, to switch to a new user,\
+				click \"Switch to a different user...\", then type the user's\
+				e-mail address, and then\ \"Go!\"</strong></p>\n\
 				<p><strong>On this form, radio buttons (used for selection) do\
 				not submit by themselves.  You will need to press the submit\
 				button at the bottom of the screen.</strong></p>\n"
@@ -4122,83 +4381,89 @@ switch -exact [getPageMode] {
 			}
 			puts -nonewline "<p>These options complement the controls\
 				available from the configuration file.</p>\n\
+				<hr>\
 				<p><input type=\"radio\" name=\"administrativeAction\"\
 				value=\"addUser\"> Add a new user to the system.</p>\n\
 				<blockquote>\n
 				<p>E-mail address:<br>\n
 				<input type=\"text\" name=\"newUserId\"\
-				size=\"[getTextWidth]\"><br>\n
+				size=\"[expr [getTextWidth] - 10]\"><br>\n
 				Password:<br>\n\
 				<input type=\"password\" name=\"newUserPassword\"\
-				size=\"[getTextWidth]\"><br>
+				size=\"[expr [getTextWidth] - 10]\"><br>
 				Repeat password:<br>\n\
 				<input type=\"password\" name=\"newUserPasswordDuplicate\"\
-				size=\"[getTextWidth]\"></p>\n\
+				size=\"[expr [getTextWidth] - 10]\"></p>\n\
 				</blockquote>\
-				<font size=\"-4\"><br></font>\
+				<hr>\
 				<p><input type=\"radio\" name=\"administrativeAction\"\
 				value=\"switchUser\"> Switch to a different user (switch to\
-				user 'guest' to edit what a guest sees).</p>\n\
+				user \"guest\" to edit what a guest sees, or \"template\" to\
+				edit the template data given to new users).</p>\n\
 				<blockquote>\
 				<p>E-mail address:<br>\n\
 				<input type=\"text\" name=\"switchUserId\"\
-				size=\"[getTextWidth]\"></p>\n\
+				size=\"[expr [getTextWidth] - 10]\"></p>\n\
 				</blockquote>\
-				<font size=\"-4\"><br></font>\
+				<hr>\
 				<p><input type=\"radio\" name=\"administrativeAction\"\
 				value=\"changeUserPassword\"> Change a user's password.</p>\n\
 				<blockquote>\
 				User's e-mail address:<br>\n\
 				<input type=\"text\" name=\"changeUserPasswordEmail\"\
-				size=\"[getTextWidth]\"><br>\n\
+				size=\"[expr [getTextWidth] - 10]\"><br>\n\
 				New password:<br>\n\
 				<input type=\"password\" name=\"changeUserPasswordPassword\"\
-				size=\"[getTextWidth]\"><br>\n\
+				size=\"[expr [getTextWidth] - 10]\"><br>\n\
 				Repeat new password:<br>\n\
 				<input type=\"password\" name=\"changeUserPasswordDuplicate\"\
-				size=\"[getTextWidth]\"></p>\n\
+				size=\"[expr [getTextWidth] - 10]\"></p>\n\
 				</blockquote>\
-				<font size=\"-4\"><br></font>\
+				<hr>\
 				<p><input type=\"radio\" name=\"administrativeAction\"\
 				value=\"setUserToTextOnly\"> Set user to text-only access (no
 				working HTML displayed in [getProgramNameWithArticle]).</p>\n\
 				<blockquote>\
 				E-mail address:<br>\n\
 				<input type=\"text\" name=\"setUserToTextOnlyUserId\"\
-				size=\"[getTextWidth]\"></p>\n\
+				size=\"[expr [getTextWidth] - 10]\"></p>\n\
 				</blockquote>\
-				<font size=\"-4\"><br></font>\
+				<hr>\
 				<p><input type=\"radio\" name=\"administrativeAction\"\
 				value=\"resetUserFromTextOnly\"> Remove a text-only access
 				restriction from a given user.</p>\n\
 				<blockquote>\
 				E-mail address:<br>\n\
 				<input type=\"text\" name=\"resetUserFromTextOnlyUserId\"\
-				size=\"[getTextWidth]\"></p>\n\
+				size=\"[expr [getTextWidth] - 10]\"></p>\n\
 				</blockquote>\
+				<hr>\
 				<p><input type=\"radio\" name=\"administrativeAction\"\
-				value=\"lockUser\">Lock user account</p>\n\
+				value=\"lockUser\"> Lock user account</p>\n\
 				<blockquote>\
 				E-mail address:<br>\n\
 				<input type=\"text\"\ name=\"lockUserId\"\
-				size=\"[getTextWidth]\"></p>\n\
+				size=\"[expr [getTextWidth] - 10]\"></p>\n\
 				</blockquote>\
-				<font size=\"-4\"><br></font>\
+				<hr>\
 				<p><input type=\"radio\" name=\"administrativeAction\"\
-				value=\"unlockUser\">Unlock user account</p>\n\
+				value=\"unlockUser\"> Unlock user account</p>\n\
 				<blockquote>\
 				E-mail address:<br>\n\
 				<input type=\"text\"\ name=\"unlockUserId\"\
-				size=\"[getTextWidth]\"></p>\n\
+				size=\"[expr [getTextWidth] - 10]\"></p>\n\
+				</blockquote>\
+				<hr>\n\
 				<p><input type=\"radio\" name=\"administrativeAction\"\
 				value=\"grantAdministrativePriveleges\"> Grant administrative\
 				priveleges<br>\n\
+				<blockquote>\
 				E-mail address:<br>\n\
 				<input type=\"text\"\
 				name=\"grantAdministrativePrivelegesUserId\"\
-				size=\"[getTextWidth]\"></p>\n\
+				size=\"[expr [getTextWidth] - 10]\"></p>\n\
 				</blockquote></p>\
-				<font size=\"-4\"><br></font>\
+				<hr>\
 				<p><input type=\"radio\" name=\"administrativeAction\"\
 				value=\"revokeAdministrativePriveleges\"> Revoke administrative\
 				priveleges</p>\n\
@@ -4206,23 +4471,23 @@ switch -exact [getPageMode] {
 				E-mail address:<br>\n\
 				<input type=\"text\"\
 				name=\"revokeAdministrativePrivelegesUserId\"\
-				size=\"[getTextWidth]\"></p>\n\
+				size=\"[expr [getTextWidth] - 10]\"></p>\n\
 				</blockquote>\
-				<font size=\"-4\"><br></font>\
+				<hr>\
 				<p><input type=\"radio\" name=\"administrativeAction\"\
 				value=\"deleteUser\"> DELETE an existing user.</p>\n\
 				<blockquote>\
-				User's e-mail address:<br>\n\
+				E-mail address:<br>\n\
 				<input type=\"text\" name=\"deleteUserId\"\
-				size=\"[getTextWidth]\"></p>\n\
+				size=\"[expr [getTextWidth] - 10]\"></p>\n\
 				</blockquote>\
-				<font size=\"-4\"><br></font>\
+				<hr>\
 				<p><input type=\"radio\" name=\"administrativeAction\"\
 				value=\"listUsers\"> List users</p>\n\
+				<hr>\
 				<p><input type=\"radio\" name=\"administrativeAction\"\
 				value=\"returnToSnippets\" checked> Return to\
-				[getProgramNameWithArticle]</p>\n\
-				<font size=\"-4\"><br></font>\
+				[getProgramNameWithArticle].<font size=\"-4\"><br><br></font></p>\
 				<p><input type=\"image\" name=\"Go!\"\ border=\"0\"
 				src=\"[getDocumentURL]/submit.jpg\"></p>\n"
 		} else {
@@ -4255,7 +4520,7 @@ switch -exact [getPageMode] {
 						value=\"connect\">\n"
 					registerQueryData "pageMode" "connect"
 					if {[getProgramMode] == "MagicNotebook"} {
-						displayStandardChoices view
+						displayStandardChoices view 1
 					} else {
 						puts -nonewline "<p><input type=\"image\"\ border=\"0\"
 							name=\"Show another page\"
@@ -4276,7 +4541,7 @@ switch -exact [getPageMode] {
 					} else {
 						showSnippets
 					}
-					displayStandardChoices view
+					displayStandardChoices view 1
 				} else {
 					accessError
 				}
@@ -4389,7 +4654,7 @@ switch -exact [getPageMode] {
 				showSnippets
 			}
 			if { ! [testUserFlag [getUserName] "hide_menu_from_view_page"]} {
-				displayStandardChoices view
+				displayStandardChoices view 1
 			}
 		}
 	}
@@ -4418,44 +4683,44 @@ switch -exact [getPageMode] {
 				showMagicNotebook
 			} else {
 				puts "<p>Select an action:</p>"
-				set topicNumber 0
-				foreach {topic} [getNotes] {
-					printNoteName $topic
+				set noteNumber 0
+				foreach {note} [getNotes] {
+					printNoteName $note
 					puts -nonewline "<p>"
 					puts "<input type=\"radio\" name=\"action\"\
-						value=\"edittopic_$topic\"\
+						value=\"editnote_$note\"\
 						onclick=\"document.[getProgramMode].submit()\"\
 						>\
-						Edit topic &nbsp; "
-					if {[isActive $topic]} {
+						Edit note &nbsp; "
+					if {[isActive $note]} {
 						puts "<input type=\"radio\" name=\"action\"\
-							value=\"hide_$topic\"\
+							value=\"hide_$note\"\
 							onclick=\"document.[getProgramMode].submit()\"\
 							>\
 							Hide &nbsp; "
 					} else {
 						puts "<input type=\"radio\" name=\"action\"\
-							value=\"show_$topic\"\
+							value=\"show_$note\"\
 							onclick=\"document.[getProgramMode].submit()\"\
 							>\
 							Show &nbsp; "
 					}
-					if {$topicNumber > 0} {
+					if {$noteNumber > 0} {
 						puts "<input type=\"radio\" name=\"action\"\
-							value=\"moveup_$topic\"\
+							value=\"moveup_$note\"\
 							onclick=\"document.[getProgramMode].submit()\"\
 							>\
 							Move up &nbsp; "
 					}
-					if {$topicNumber < [expr [getNumberOfNotes] - 1]} {
+					if {$noteNumber < [expr [getNumberOfNotes] - 1]} {
 						puts "<input type=\"radio\" name=\"action\"\
-							value=\"movedown_$topic\"\
+							value=\"movedown_$note\"\
 							onclick=\"document.[getProgramMode].submit()\"\
 							>\
 							Move down &nbsp; "
 					}
 					puts -nonewline "</p>\n"
-					incr topicNumber
+					incr noteNumber
 				}
 			}
 			puts "<hr>"
@@ -4467,9 +4732,9 @@ switch -exact [getPageMode] {
 				puts "<input type=\"radio\" name=\"action\" value=\"newNote\"\
 					onclick=\"document.[getProgramMode].submit()\"\
 					>\n\
-					Create new topic<br>\n"
+					Create a new note.<br>\n"
 			}
-			displayStandardChoices metaSnippets
+			displayStandardChoices metaSnippets 0
 			}
 		}
 	"editFolder" {
@@ -4509,9 +4774,9 @@ switch -exact [getPageMode] {
 	}
 	"newSubNote" {
 		if {[authenticate]} {
-			if {[CGIValue newtopic] != "newtopic_noop" && [CGIValue\
-			  newtopic] != ""} {
-				regexp {^(.*?)_(.*)$} [CGIValue newtopic] match editCommand \
+			if {[CGIValue newnote] != "newnote_noop" && [CGIValue\
+			  newnote] != ""} {
+				regexp {^(.*?)_(.*)$} [CGIValue newnote] match editCommand \
 					actionObject
 				editNote [createNote $actionObject]
 			} else {
@@ -4527,6 +4792,10 @@ switch -exact [getPageMode] {
 	"retrievePassword" {
 		retrievePassword
 	}
+    "search" {
+        displaySearchResults
+        displayStandardChoices search 1
+    }
 	"sidebar" {
 		if {[shouldAllowSidebarAccess]} {
 			showSnippets

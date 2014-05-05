@@ -30,6 +30,10 @@ proc checkInstallVsUpgrade {} {
 	#}
 }
 
+#proc expandTilde {path} {
+    #return [lindex [glob -nocomplain -- $path] 0]
+#}
+
 proc getProgramMode {} {
 	global programMode
 	return $programMode
@@ -105,6 +109,9 @@ proc init {} {
 \nwindows open during installation: one for this script, and one to poke\
 \npoke around on the system and find appropriate answers to script questions.\
 \n\
+\nThis script recognizes the abbreviations \"~\" and \"~user\" for pathnames\
+\nthat are not part of a URL.\
+\n\
 \nHit return to continue..."
 gets stdin
 }
@@ -144,7 +151,7 @@ proc install {} {
 	exec rm -rf "$filePrefix/users/$serverAdminEmail"
 	exec cp -r "administrator_home" "$filePrefix/users/$serverAdminEmail"
 	exec chmod -R 777 "$filePrefix/users/$serverAdminEmail"
-	set administratorPassword "change_me_[expr [clock clicks] % 1000]"
+	set administratorPassword "change_me_7[expr [clock clicks] % 1000]"
 	set filename "$filePrefix/general/access"
 	if { [ catch { open $filename a } appendId ] } {
 		puts stderr "Couldn't open file $filename for append! You don't have\
@@ -225,8 +232,15 @@ proc install {} {
 \nout of $fullProgramName, please read it.\
 \n\
 \nAn administrative account has been created, with e-mail address\
-\n$serverAdminEmail and password $administratorPassword.  You are encouraged\
-\nto change this password as soon as possible. The address is:\
+\n\
+\n\t$serverAdminEmail\
+\n\
+\nand password\
+\n\
+\n\t$administratorPassword.\
+\n\
+\nYou are encouraged to change this password as soon as possible. The address\
+\nis:\
 \n\
 \n	$fullBaseURL\
 \n\
@@ -289,8 +303,7 @@ set absoluteSnippetsPath [getValue $absoluteSnippetsPath]
 puts -nonewline "\
 \nWhat relative URL do you want $fullProgramName-related public documents to\
 \nhave? These include the $fullProgramName privacy policy and any\
-\n$fullProgramName-related materials\
-\nyou may wish to display.\
+\n$fullProgramName-related materials you may wish to display.\
 \n\
 \nDocument URL"
 set documentURL [getValue $documentURL]
@@ -457,13 +470,17 @@ proc standardizeResponses {} {
 	global shouldAllowLoginAccess
 	global shouldAllowLoginCreation
 	global shouldAllowWikiAccess
+    #set absoluteSnippetsDocumentRoot [expandTilde $absoluteSnippetsDocumentRoot]
+    #set absoluteSnippetsPath [expandTilde $absoluteSnippetsPath]
 	set absoluteSnippetsPath [removeTrailingSlash $absoluteSnippetsPath]
 	set actionURL [removeTrailingSlash $actionURL]
 	set actionURL [prefixTildeWithSlash $actionURL]
 	set documentURL [addTrailingSlash $documentURL]
 	set actionURL [prefixTildeWithSlash $actionURL]
 	set filePrefix [addTrailingSlash $filePrefix]
+    #set filePrefix [expandTilde $filePrefix]
 	set fullBaseURL [removeTrailingSlash $fullBaseURL]
+    #set fullTclPath [expandTilde $fullTclPath]
 }
 
 proc substitute {filename tag value} {
