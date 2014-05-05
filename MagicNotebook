@@ -12,6 +12,7 @@
 #	Stuart Cassoff, who furnished the configuration file code
 #	Bruce Hartweg
 #	Jeff Hobbs
+#   Jeff Hotz
 #	Paul Johnson
 #	Cameron Laird
 #	Mick O'Donnell
@@ -2409,8 +2410,8 @@ proc initialize {} {
 	set metadataWritten 0
 	set collapsedObject ""
 	set contentTypeGiven 0
-	set currentVersionNumber "1.4"
-	set currentReleaseNumber "1"
+	set currentVersionNumber "1.4.1"
+	set currentReleaseNumber "2"
 	set lockedFiles {}
 	set pageModeHasBeenCalled 0
 	set passwordsRead 0

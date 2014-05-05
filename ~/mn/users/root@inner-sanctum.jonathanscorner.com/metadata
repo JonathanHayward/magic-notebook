@@ -1,7 +1,0 @@
-"MagicNotebook1030654585126534980" "A note to Magic Notebook administrators" "You've successfully installed the Magic Notebook. A couple of brief notes:
-<ul><li>From the main page, you can use administrative options, one of which will let you switch user to a different user. This enables you to edit what the guest mode sees.
-<li>Files of interest for customizing the Magic Notebook include <tt>/usr/doc/MagicNotebook/*</tt> and <tt>/usr/lib/MagicNotebook/*</tt>. The latter directory includes <tt>config</tt> (which you can use to control Magic Notebook's behavior), <tt>header</tt> (which is the beginning of every page), and <tt>footer</tt> (which is the end of every page).
-<li>If you're security conscious, you might consider setting <tt>/usr/lib/MagicNotebook</tt> and all its contents to mode 700, owned by the UID which CGI scripts run under.
-</ul>(If you used the manual installer and specified different directories during installation, please substitute the pathnames you supplied then.)
-
-Thank you for using the Magic Notebook!" "show selected expand" "top"
