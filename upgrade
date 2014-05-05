@@ -26,25 +26,33 @@ proc getValue {default} {
 }
 
 proc init {} {
+	global absoluteSnippetsDocumentRoot
 	global absoluteSnippetsPath
 	global documentURL
 	global filePrefix
+	global fullBaseURL
 	global fullProgramName
 	global fullTclPath
 	global programMode
+	global shouldReplaceBackground
 	global shouldUpdateHTML
+	global shouldUpdatePrivacyPolicy
 	#set programMode "sidebar"
 	set programMode "MagicNotebook"
 	set documentURL "/$programMode/"
+	set fullBaseURL "http://[exec hostname]/cgi-bin/$programMode"
 	#set fullProgramName "Sidebar in a Can"
 	set fullProgramName "Magic Notebook"
 	#set absoluteSnippetsPath "/usr/pkg/libexec/cgi-bin/$programMode"
 	set absoluteSnippetsPath "/var/www/cgi-bin/$programMode"
+	set absoluteSnippetsDocumentRoot "/var/www/html/$programMode/"
 	#set filePrefix "/usr/pkg/share/httpd/$programMode/"
-	set filePrefix "/var/www/$programMode/"
+	set filePrefix "/usr/lib/$programMode/"
 	#set fullTclPath "/usr/pkg/bin/tclsh"
 	set fullTclPath "/usr/bin/tclsh"
+	set shouldReplaceBackground "yes"
 	set shouldUpdateHTML "yes"
+	set shouldUpdatePrivacyPolicy "yes"
 	puts -nonewline "[exec clear]"
 	puts -nonewline\
 "You are beginning the $fullProgramName UPGRADE script.  This script will ask\
@@ -65,13 +73,17 @@ gets stdin
 
 # Not indented, because of spacing concerns.
 proc interview {} {
+global absoluteSnippetsDocumentRoot
 global absoluteSnippetsPath
 global documentURL
 global filePrefix
+global fullBaseURL
 global fullProgramName
 global fullTclPath
 global programMode
+global shouldReplaceBackground
 global shouldUpdateHTML
+global shouldUpdatePrivacyPolicy
 
 puts -nonewline "\
 \nWhat is the full path to the Tcl executable (usually tclsh)?\
@@ -85,6 +97,17 @@ puts -nonewline "\
 \nAbsolute path"
 set absoluteSnippetsPath [getValue $absoluteSnippetsPath]
 puts -nonewline "\
+\nWhat absolute path--on your filesystem, not on the web--do you have public\
+$fullProgramName web documents stored in?\
+\n\
+\n$fullProgramName public HTML directory"
+set absoluteSnippetsDocumentRoot [getValue $absoluteSnippetsDocumentRoot]
+puts -nonewline "\
+\nWhat is the full, publicly stated URL for your $fullProgramName script?\
+\n\
+\nFull base URL"
+set fullBaseURL [getValue $fullBaseURL]
+puts -nonewline "\
 \nWhat URL are $fullProgramName documents stored at?\
 \n\
 \nDocument URL"
@@ -94,13 +117,27 @@ puts -nonewline\
 \n\
 \nPrivate data directory"
 set filePrefix [getValue $filePrefix]
+puts -nonewline "\
+\nThe current version of the Magic Notebook includes a background meant to be\
+\neasier on the eyes and easier to read. Would you like to replace your\
+\ncurrent background with the new background?\
+\n\
+\nReplace background (yes/no)"
+set shouldReplaceBackground [getValue $shouldReplaceBackground]
 puts -nonewline\
 "\nThe beginning and end of pages have been changed slightly to use CSS.\
 \nUpdating them will make the pages look nicer, but overwrite any\
 \ncustomizations you made to the start pages.\
 \n\
-\nWould you like to use the updated HTML (yes/no) \[$shouldUpdateHTML\]?"
+\nWould you like to use the updated HTML (yes/no)"
 set shouldUpdateHTML [getValue $shouldUpdateHTML]
+puts -nonewline\
+"\nThe old privacy policy page was not up to date. If you have not written\
+\nyour own privacy policy, I suggest that you replace the privacy policy with\
+\nthe newer one.\
+\n\
+\nWould you like to use the improved privacy policy (yes/no)"
+set shouldUpdatePrivacyPolicy [getValue $shouldUpdatePrivacyPolicy]
 puts -nonewline "\
 \nYou have selected the following options:\
 \n"
@@ -112,6 +149,8 @@ puts -nonewline\
 "\n\tPrivate $programMode data directory: $filePrefix"
 puts -nonewline\
 "\n\tShould HTML be changed: $shouldUpdateHTML"
+puts -nonewline\
+"\n\tShould privacy policy be changed: $shouldUpdatePrivacyPolicy"
 puts -nonewline "\n\
 \nAre these options all correct (yes/no)"
 if {[isTrue [getValue "yes"]]} {
@@ -136,8 +175,11 @@ exit 0
 proc isTrue {optionValue} {
 	switch [string tolower $optionValue] {
 		true -
+		t -
 		yes -
+		y -
 		on -
+		o -
 		1 {
 			return 1
 		}
@@ -194,21 +236,39 @@ proc substitute {filename tag value} {
 }
 
 proc upgrade {} {
+	global absoluteSnippetsDocumentRoot
 	global absoluteSnippetsPath
 	global documentURL
 	global filePrefix
+	global fullBaseURL
 	global fullProgramName
 	global fullTclPath
 	global programMode
+	global shouldUpdateHTML
+	global shouldUpdatePrivacyPolicy
 	puts -nonewline "\nUpgrading...\n"
-	exec cp "[removeTrailingSlash $filePrefix]/general/header"\
-	  "[removeTrailingSlash $filePrefix]/general/header.bak"
-	exec cp "[removeTrailingSlash $filePrefix]/general/footer"\
-	  "[removeTrailingSlash $filePrefix]/general/footer.bak"
-	exec cp "data/general/header" "[removeTrailingSlash\
-	  $filePrefix]/general/header"
-	exec cp "data/general/footer" "[removeTrailingSlash\
-	  $filePrefix]/general/footer"
+	if {[isTrue $shouldUpdateHTML]} {
+		exec cp "[removeTrailingSlash $filePrefix]/general/header"\
+		  "[removeTrailingSlash $filePrefix]/general/header.bak"
+		exec cp "[removeTrailingSlash $filePrefix]/general/footer"\
+		  "[removeTrailingSlash $filePrefix]/general/footer.bak"
+		exec cp "data/general/header" "[removeTrailingSlash\
+		  $filePrefix]/general/header"
+		exec cp "data/general/footer" "[removeTrailingSlash\
+		  $filePrefix]/general/footer"
+	}
+	if {[isTrue $shouldUpdatePrivacyPolicy]} {
+		exec cp "htdocs/privacy.html" "[removeTrailingSlash\
+		  $absoluteSnippetsDocumentRoot]/privacy.html"
+		substitute "$absoluteSnippetsDocumentRoot/privacy.html" "DOCUMENT_URL"\
+		  $documentURL
+	}
+	exec cp "data/general/logout" "[removeTrailingSlash\
+	  $filePrefix]/general/logout"
+	substitute "[removeTrailingSlash $filePrefix]/general/logout"\
+	  "DOCUMENT_URL" $documentURL
+	substitute "[removeTrailingSlash $filePrefix]/general/logout"\
+	  "FULL_BASE_URL" $fullBaseURL
 	substitute "[removeTrailingSlash $filePrefix]/general/header"\
 	  "DOCUMENT_URL" $documentURL
 	exec cp $programMode $absoluteSnippetsPath

@@ -188,6 +188,12 @@ proc install {} {
 		"DOCUMENT_URL" "[removeTrailingSlash $documentURL]"
 	substitute "[removeTrailingSlash $filePrefix]/general/header"\
 		"FULL_BASE_URL" "$fullBaseURL"
+	exec cp "data/general/logout" "[removeTrailingSlash\
+	  $filePrefix]/general/logout"
+	substitute "[removeTrailingSlash $filePrefix]/general/logout"\
+	  "DOCUMENT_URL" $documentURL
+	substitute "[removeTrailingSlash $filePrefix]/general/logout"\
+	  "FULL_BASE_URL" $fullBaseURL
 	substitute\
 		"[removeTrailingSlash $absoluteSnippetsDocumentRoot]/privacy.html"\
 		"SERVER_ADMIN_EMAIL" "$serverAdminEmail"
@@ -317,7 +323,7 @@ puts -nonewline "\
 \n$fullProgramName private data directory"
 set filePrefix [getValue $filePrefix]
 puts -nonewline "\
-\nWhat is the full, publicly stated URL for your Snippets script?\
+\nWhat is the full, publicly stated URL for your $fullProgramName script?\
 \n\
 \nFull base URL"
 set fullBaseURL [getValue $fullBaseURL]

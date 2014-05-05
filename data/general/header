@@ -6,7 +6,7 @@
 <title>The Magic Notebook</title>
 <style>
 <!--
-A.titlelink { text-decoration: none; size: +1; strong }
+A.titlelink { text-decoration: none; font-size: larger; font-weight: bold }
 -->
 </style>
 </head>

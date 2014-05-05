@@ -349,7 +349,7 @@ proc addUser {login password passwordDuplicate} {
 			fileId] } {
 			logMessage "Couldn't open file\
 				[getFilePrefix]/users/$login/metadata.  Exiting from\
-				createLogin..."
+				createLogin... $fileId"
 			panic
 		} else {
 			puts -nonewline $fileId ""
@@ -449,6 +449,16 @@ proc changePassword {userId password duplicate} {
 	}
 }
 
+proc checkForLogout {} {
+	#debugLog "checkForLogout"
+	if { [CGIValue pageMode] == "logout" || \
+		[CGIValue logout_button] != "" || \
+		[CGIValue logout_button.x] != "" || \
+		[CGIValue logout_button.x] != "" } {
+		readFile [concat [getFilePrefix]/general/logout]
+		exit 0
+	}
+}
 proc clearFlag {target flag} {
 	#debugLog "cf"
 	if {[regexp -- "$flag" "$target"]} {
@@ -562,7 +572,7 @@ proc createFolder {{parent top}} {
 # at the same time.
 proc createLogin {} {
 	global passwords
-	#debugLog "cl"
+	#debugLog "createLogin"
 	getLock [getPasswordFilename]
 	readPasswords
 	set login [CGIValue newLogin]
@@ -618,22 +628,38 @@ proc createLogin {} {
 			set newLogin(parent) ""
 			lappend passwords [array get newLogin]
 			writePasswords
-			file mkdir "[getFilePrefix]/users/$login"
-			if { [catch {open "[getFilePrefix]/users/$login/metadata" w} \
-				fileId] } {
-				logMessage "Couldn't open file\
-					[getFilePrefix]/users/$login/metadata.  Exiting from\
-					createLogin..."
-				panic
+			file delete -force "[getFilePrefix]/users/$login"
+			file copy -force "[getFilePrefix]/users/template" \
+			  "[getFilePrefix]/users/$login"
+			#if { [catch {open "[getFilePrefix]/users/$login/metadata" w} \
+				#fileId] } {
+				#logMessage "Couldn't open file\
+					#[getFilePrefix]/users/$login/metadata.  Exiting from\
+					#createLogin... $fileId"
+				#panic
+			#} else {
+				#puts -nonewline $fileId ""
+				#close $fileId
+			#}
+			if {[getProgramMode] == "MagicNotebook"} {
+				readMetaData
+				puts "<input type=\"hidden\" name=\"login\" value=\"$login\">"
+				puts "<input type=\"hidden\" name=\"password\"\
+					value=\"$password\">"
+				showMagicNotebook
+				displayStandardChoices
 			} else {
-				puts -nonewline $fileId ""
-				close $fileId
+				welcomeScreen $login $password
 			}
-			welcomeScreen $login $password
 			pageEnd
 			releaseLock [getPasswordFilename]
 			exit 0
 			}
+		} else {
+			displayCreateLogin
+			pageEnd
+			releaseLock [getPasswordFilename]
+			exit 0
 		}
 	}
 	puts -nonewline "<p>This server is not presently set up to create\
@@ -677,7 +703,7 @@ proc createTopic {{parent top}} {
 	writeMetaData 1
 	selectTopic $newTopic(identifier)
 	if { [catch {open $fullFilename w} fileId] } {
-		logMessage "Couldn't open file $fullFilename. Exiting from createTopic..."
+		logMessage "Couldn't open file $fullFilename. Exiting from createTopic... $fileId"
 		panic
 	} else {
 		puts $fileId "\"\""
@@ -817,7 +843,8 @@ proc displayForParent {parentName {htmlPrefix ""}} {
 		  [getPageMode] == "metaSnippets"} {
 			puts "$htmlPrefix<table border=\"0\" cellspacing=\"0\"\
 			  cellpadding=\"3\">\n<tr>\n"
-			if {[getPageMode] == "snippets" || [getPageMode] == "connect"} {
+			if {[getPageMode] == "snippets" || [getPageMode] == "connect" || \
+				[CGIValue pageMode] == "createLogin"} {
 				puts "$htmlPrefix<td>"
 				if {[testMetaDataFlag $field "expand"]} {
 					puts -nonewline "$htmlPrefix[getCollapseLinkBeginning\
@@ -988,8 +1015,10 @@ proc displayNewTopicMenu {} {
 }
 
 proc displayStandardChoices {} {
-	#debugLog "dsc"
+	#debugLog "displayStandardChoices"
 	if {[CGIValue accessMethod] == "guest"} {
+		puts -nonewline "<p><input type=\"image\" name=\"logout_button\"\
+			border=\"0\" src=\"[getDocumentURL]/logout.jpg\"></p>\n"
 		return
 	}
 	puts "<hr>\n<p>"
@@ -1006,13 +1035,13 @@ proc displayStandardChoices {} {
 		puts -nonewline "checked"
 	}
 	puts -nonewline ">\n\
-		Edit what appears on the [getProgramName] page.\n"
-	switch [CGIValue accessMethod] {
+		Edit what appears on the [getProgramName] page.<br>\n"
+	switch [getUserName] {
 		guest -
 		wiki {
 		}
 		default {
-			puts -nonewline "<br><input type=\"radio\" name=\"pageMode\"\
+			puts -nonewline "<input type=\"radio\" name=\"pageMode\"\
 				value=\"accountManagement\"\
 				onclick=\"document.[getProgramMode].submit()\"\
 				>\n\
@@ -1024,6 +1053,13 @@ proc displayStandardChoices {} {
 			value=\"administrative\"\
 			onclick=\"document.[getProgramMode].submit()\"\
 			> Use administrative tools.<br>"
+	}
+	puts -nonewline "<input type=\"radio\" name=\"pageMode\" value=\"logout\"\
+		onclick=\"document.[getProgramMode].submit()\">\n"
+	if {[getProgramMode] == "MagicNotebook"} {
+		puts -nonewline "Log out from the Magic Notebook.<br>\n"
+	} else {
+		puts -nonewline "Log out from [getProgramName].<br>\n"
 	}
 	puts -nonewline "</p>\n<p><input type=\"image\" name=\"Go!\"\ border=\"0\"
 		src=\"[getDocumentURL]/submit.jpg\"></p>\n"
@@ -1216,7 +1252,6 @@ proc entrySort {toSort {criterionToSortOn "topicName"}} {
 			set dividingFieldToCompare [getTopicName $dividingKey]
 		}
 	}
-	set dividingFieldToCompare "$dividingFieldToCompare     $dividingKey"
 	foreach current $toSort {
 		if {$current != $dividingKey} {
 			switch $criterionToSortOn {
@@ -1228,12 +1263,21 @@ proc entrySort {toSort {criterionToSortOn "topicName"}} {
 					set currentFieldToCompare [getTopicName $current]
 				}
 			}
-			set currentFieldToCompare "$currentFieldToCompare     $current"
+			# Sort on displayed field value, using the key as a tiebreaker
+			# so as to have consistent behavior between two items of the same
+			# key.
 			if {[string compare -nocase $currentFieldToCompare \
 			  $dividingFieldToCompare] < 0} {
 				lappend lesserBin $current
-			} else {
+			} elseif {[string compare -nocase $currentFieldToCompare \
+			  $dividingFieldToCompare] > 0} {
 				lappend greaterOrEqualBin $current
+			} else {
+				if {[string compare -nocase $current $dividingKey] < 0} {
+					lappend lesserBin $current
+				} else {
+					lappend greaterOrEqualBin $current
+				}
 			}
 		}
 	}
@@ -1396,7 +1440,8 @@ proc getClosedTopicIconFilename {} {
 
 proc getCloseTopicNameTag {} {
 	#debugLog "gctnt"
-	return "</strong></font>"
+	#return "</strong></font>"
+	return ""
 }
 
 proc getCollapseLinkBeginning {identifier} {
@@ -1416,7 +1461,6 @@ proc getConfigValue {key defaultValue} {
 	global configResult
 	#debugLog "gcv"
 	foreach candidateKey [array names configResult] {
-		#debugLog "gcv1 $candidateKey"
 		if {$candidateKey == $key} {
 			return $configResult($key)
 		}
@@ -1504,23 +1548,27 @@ proc getHeader {id} {
 # opportunity for a file to become corrupted.
 proc getLock {filename} {
 	#debugLog "getLock"
+	# To address chicken-and-egg concerns.
+	if {![file exists $filename]} {
+		return
+	}
 	set currentMtimeFilename [getCurrentMtimeFilename]
 	set lockTimeout [getLockTimeout]
 	set startTime [clock seconds]
 	if {[file exists "$filename.lock"]} {
 		set shouldContinue 1
 		while {$shouldContinue} {
-			#debugLog "glI.1"
 			if { [catch {open "$currentMtimeFilename" w} fileId] } {
 				logMessage "gl2 Couldn't open $currentMtimeFilename for\
-					writing."
+					writing. $fileId"
 				panic
 			} else {
 				close $fileId
 			}
 			if {[file exists "$filename.lock"]} {
 				if { [catch {open "$currentMtimeFilename" w} fileId] } {
-					logMessage "gl1 Couldn't open $filename.lock for writing."
+					logMessage "gl1 Couldn't open $filename.lock for writing.
+					$fileId"
 					panic
 				} else {
 					close $fileId
@@ -1531,7 +1579,7 @@ proc getLock {filename} {
 					# ourselves.
 					if { [catch {open "$filename.lock" w} fileId] } {
 						logMessage "gl2 Couldn't open $filename.lock for\
-							writing."
+							writing. $fileId"
 						panic
 					} else {
 						close $fileId
@@ -1539,11 +1587,10 @@ proc getLock {filename} {
 					registerLock $filename
 					return
 				}
-			#debugLog "glI.3"
 			} else {
-			#debugLog "glI.4"
 				if { [catch {open "$filename.lock" w} fileId] } {
-					logMessage "gl3 Couldn't open $filename.lock for writing."
+					logMessage "gl3 Couldn't open $filename.lock for writing.
+					$fileId"
 					panic
 				} else {
 					close $fileId
@@ -1560,7 +1607,7 @@ proc getLock {filename} {
 		# ourselves.
 		if { [catch {open "$filename.lock" w} fileId] } {
 			logMessage "gl2 Couldn't open $filename.lock for\
-				writing."
+				writing. $fileId"
 			panic
 		} else {
 			close $fileId
@@ -1569,7 +1616,7 @@ proc getLock {filename} {
 		return
 	} else {
 		if { [catch {open "$filename.lock" w} fileId] } {
-			logMessage "gl4 Couldn't open $filename.lock for writing."
+			logMessage "gl4 Couldn't open $filename.lock for writing. $fileId"
 			panic
 		} else {
 			close $fileId
@@ -1616,7 +1663,8 @@ proc getOpenTopicIconFilename {} {
 
 proc getOpenTopicNameTag {} {
 	#debugLog "gotnt"
-	return "<font size=\"+1\"><strong>"
+	#return "<font size=\"+1\"><strong>"
+	return ""
 }
 
 # Name does not reflect procedure's full functionality.
@@ -1945,7 +1993,7 @@ proc getExpandLinkBeginning {identifier} {
 }
 
 proc getSnippetFilename {topic} {
-	#debugLog "gsf"
+	#debugLog "getSnippetFilename"
 	return [concat [getFilePrefix]/users/[getUserName]/$topic]
 }
 
@@ -2003,7 +2051,7 @@ proc getUserMetaDataFilename {userId} {
 }
 
 proc getUserName {} {
-	#debugLog "gun"
+	#debugLog "getUserName"
 	switch [getProgramMode] {
 		"sidebar" {
 			return "sidebar"
@@ -2055,6 +2103,29 @@ proc grantAdministrativePriveleges {userId} {
 	}
 }
 
+proc guardAgainstInvalidLogin {} {
+	#debugLog "guardAgainstInvalidLogin"
+	if {[CGIValue newLogin] != ""} {
+		# A new login is being created, so don't check it.
+		return
+	}
+	if {([CGIValue login] != "") && ([CGIValue pageMode] != "createLogin") && \
+	  ([CGIValue pageMode] != "forgotPassword")} {
+		if {![userExists [CGIValue login]]} {
+			#pageStart
+			readFile [concat [getFilePrefix]/general/header]
+			puts "<form method=\"post\" action=\"[getActionURL]\" name=\"[getProgramMode]\">"
+	#puts "<input type=\"hidden\" name=\"previousPageMode\"\
+		#value=\"[getPageMode]\">"
+			printInvalidLoginText
+			pageEnd
+			exit 0
+		} elseif {[isAdministrator [CGIValue login]] && ![userExists [CGIValue\
+		  effectiveUserId]]} {
+		}
+	}
+}
+
 proc hide {id} {
 	global metaData
 	#debugLog "h"
@@ -2084,10 +2155,9 @@ proc init {} {
 	global resultArray
 	global userNotifiedOfLock
 	#One of the following two lines should be uncommented.
-	set debugMode 1
-	#set debugMode 0
+	#set debugMode 1
+	set debugMode 0
 	#debugLog "i"
-	#set debugMode 0
 	 debugLog "Starting processing..."
 	set administrativeActionResult ""
 	set metaDataRead 0
@@ -2121,6 +2191,9 @@ proc init {} {
 	puts ""
 	CGIParse
 	loadConfigFile [getConfigFilename]
+	readPasswords
+	guardAgainstInvalidLogin
+	checkForLogout
 	## Commented out solution because of weird syntax complaints re:
 	## CGIValue.  Addresses chicken-and-egg concern if user tries to look up
 	## password for misspelled userID.
@@ -2131,6 +2204,8 @@ proc init {} {
 		#}
 	#}
 	if {[CGIValue pageMode] == "forgotPassword"} {
+		readFile [concat [getFilePrefix]/general/header]
+		puts "<form method=\"post\" action=\"[getActionURL]\" name=\"[getProgramMode]\">"
 		forgotPassword
 		pageEnd
 		exit 0
@@ -2145,43 +2220,16 @@ proc init {} {
 	if {[CGIValue topic] != ""} {
 		saveSelectedTopic [CGIValue topic]
 	}
-	readPasswords
 	if {[CGIValue shouldsave] == "yes"} {
 		saveSubmittedChanges
 	}
-	 debugLog [CGIQuery]
-	if {[shouldAuthenticate]} {
-		if {![authenticate]} {
-			pageStart 0
-			puts -nonewline "\
-				<p>The e-mail or password you have supplied is incorrect.\n\
-				Would you like to try again?</p>\n\
-				<p>E-mail address:<br>\n\
-				<input type=\"text\" name=\"login\"\
-				size=\"[getTextWidth]\"></p>\n\
-				<p>Password:<br>\n\
-				<input type=\"password\" name=\"password\"\
-				size=\"[getTextWidth]\"></p>\n\
-				<p><input type=\"radio\" name=\"pageMode\" value=\"snippets\"\
-				onclick=\"document.[getProgramMode].submit()\" checked> Log in<br>\n"
-				if {[shouldAllowLoginCreation]} {
-					puts -nonewline "\
-						<input type=\"radio\" name=\"pageMode\"\
-						value=\"createLogin\"
-						onclick=\"document.[getProgramMode].submit()\">\
-						Create a new login<br>\n"
-				}
-			puts -nonewline "\
-				<input type=\"radio\" name=\"pageMode\"\
-				value=\"forgotPassword\"\
-				onclick=\"document.[getProgramMode].submit()\">\
-				Help! I forgot my password!</p>\n\
-				<p><input type=\"image\" name=\"Go!\"\ border=\"0\"
-				src=\"[getDocumentURL]/submit.jpg\"></p>\n"
-				#<input type=\"submit\" value=\"Go!\">\n"
-			pageEnd
-			exit 0
-		}
+	debugLog [CGIQuery]
+	if {([CGIValue newLogin] == "") && ((![userExists [getUserName]]) ||\
+	  ([shouldAuthenticate] && ![authenticate]))} {
+		pageStart 0
+		printInvalidPasswordText
+		pageEnd
+		exit 0
 	}
 	getPageMode
 	writeMetaData 1
@@ -2255,8 +2303,6 @@ proc isDescendant {potentialChild potentialParent} {
 	#debugLog "id"
 	set shouldContinue 1
 	set currentNode $potentialChild
-	#debugLog "id0 $potentialChild $potentialParent"
-	#debugLog "id1 [getTopicName $potentialChild] [getTopicName $potentialParent]"
 	while {$shouldContinue} {
 		if {$currentNode == $potentialParent} {
 			return 1
@@ -2484,7 +2530,7 @@ proc pageEnd {} {
 }
 
 proc pageStart {{preserveLogin 1}} {
-	#debugLog "ps"
+	#debugLog "pageStart"
 	readFile [concat [getFilePrefix]/general/header]
 	# For MagicNotebook we use get.
 	puts "<form method=\"post\" action=\"[getActionURL]\" name=\"[getProgramMode]\">"
@@ -2544,6 +2590,62 @@ proc panic {} {
 proc printHeader {topic} {
 	#debugLog "ph"
 	puts "[filterText [removeComments [getHeader $topic]]]"
+}
+
+proc printInvalidLoginText {} {
+	puts -nonewline "\
+		<p>The login you have supplied is incorrect.\n\
+		Would you like to try again?</p>\n\
+		<p>E-mail address:<br>\n\
+		<input type=\"text\" name=\"login\"\
+		size=\"[getTextWidth]\"></p>\n\
+		<p>Password:<br>\n\
+		<input type=\"password\" name=\"password\"\
+		size=\"[getTextWidth]\"></p>\n\
+		<p><input type=\"radio\" name=\"pageMode\" value=\"snippets\"\
+		onclick=\"document.[getProgramMode].submit()\" checked> Log in<br>\n"
+		if {[shouldAllowLoginCreation]} {
+			puts -nonewline "\
+				<input type=\"radio\" name=\"pageMode\"\
+				value=\"createLogin\"
+				onclick=\"document.[getProgramMode].submit()\">\
+				Create a new login<br>\n"
+		}
+	puts -nonewline "\
+		<input type=\"radio\" name=\"pageMode\"\
+		value=\"forgotPassword\"\
+		onclick=\"document.[getProgramMode].submit()\">\
+		Help! I forgot my password!</p>\n\
+		<p><input type=\"image\" name=\"Go!\"\ border=\"0\"
+		src=\"[getDocumentURL]/submit.jpg\"></p>\n"
+}
+
+proc printInvalidPasswordText {} {
+	puts -nonewline "\
+		<p>The password you have supplied is incorrect.\n\
+		Would you like to try again?</p>\n\
+		<p>E-mail address:<br>\n\
+		<input type=\"text\" name=\"login\"\
+		size=\"[getTextWidth]\"></p>\n\
+		<p>Password:<br>\n\
+		<input type=\"password\" name=\"password\"\
+		size=\"[getTextWidth]\"></p>\n\
+		<p><input type=\"radio\" name=\"pageMode\" value=\"snippets\"\
+		onclick=\"document.[getProgramMode].submit()\" checked> Log in<br>\n"
+		if {[shouldAllowLoginCreation]} {
+			puts -nonewline "\
+				<input type=\"radio\" name=\"pageMode\"\
+				value=\"createLogin\"
+				onclick=\"document.[getProgramMode].submit()\">\
+				Create a new login<br>\n"
+		}
+	puts -nonewline "\
+		<input type=\"radio\" name=\"pageMode\"\
+		value=\"forgotPassword\"\
+		onclick=\"document.[getProgramMode].submit()\">\
+		Help! I forgot my password!</p>\n\
+		<p><input type=\"image\" name=\"Go!\"\ border=\"0\"
+		src=\"[getDocumentURL]/submit.jpg\"></p>\n"
 }
 
 proc printSnippet {topic} {
@@ -2742,7 +2844,8 @@ proc quoteHtmlMetacharacters {toQuote} {
 proc readFile {filename} {
 	#debugLog "rf"
 	if { [catch {open $filename r} fileId] } {
-		logMessage "Couldn't open file $filename. Exiting from readFile..."
+		logMessage "Couldn't open file $filename. Exiting from readFile...\
+		$fileId"
 		panic
 	} else {
 		puts [read $fileId]
@@ -2971,7 +3074,7 @@ proc removeShellMetacharacters {untrusted} {
 }
 
 proc retrievePassword {} {
-	#debugLog "rp"
+	debugLog "retrievePassword"
 	set login [CGIValue login]
 	if { [isValidLogin $login ] } {
 		set password [getPassword $login]
@@ -3157,9 +3260,9 @@ proc saveSubmittedChanges {} {
 			incr index
 		}
 	}
+	writeTopic $topic $topicContents
 	releaseLock "[getFilePrefix]/users/[getUserName]/$topic"
 	writeMetaData
-	writeTopic $topic $topicContents
 }
 
 proc selectSnippet {topic} {
@@ -3267,6 +3370,9 @@ proc shouldAllowWikiAccess {} {
 
 proc shouldAuthenticate {} {
 	#debugLog "sa"
+	if {![userExists [getUserName]]} {
+		return 1
+	}
 	switch -- [getPageMode] {
 		connect -
 		createLogin -
@@ -3512,7 +3618,7 @@ proc welcomeScreen {login password} {
 	registerQueryData "login" $login
 	registerQueryData "password" $password"
 	readFile [concat [getFilePrefix]/general/welcome]
-	if {[getPageMode] != "MagicNotebook"} {
+	if {[getProgramMode] != "MagicNotebook"} {
 		if {[userExists "template"]} {
 			puts -nonewline "<p>You may, if you are interested, include\
 				existing snippet collections in your account--you are free to\
@@ -3544,8 +3650,8 @@ proc writeMetaData {{shouldForce 0}} {
 	#debugLog "wmd"
 	if {$metaDataRead && ($shouldForce || !$metaDataWritten)} {
 		set metaDataWritten 1
-		if { [catch {open [getMetaDataFilename] w} fileId] } {
-			logMessage "Couldn't open file [getMetaDataFilename]. Exiting from writeMetaData..."
+		if { [catch {open [getMetaDataFilename].new w} fileId] } {
+			logMessage "Couldn't open file [getMetaDataFilename]. Exiting from writeMetaData... $fileId"
 			panic
 		} else {
 			set index 0
@@ -3569,6 +3675,7 @@ proc writeMetaData {{shouldForce 0}} {
 				incr index
 			}
 			close $fileId
+			file rename -force [getMetaDataFilename].new [getMetaDataFilename]
 		}
 	}
 }
@@ -3577,7 +3684,7 @@ proc writePasswords {} {
 	global passwords
 	#debugLog "wp"
 	if { [catch {open [getPasswordFilename] w} fileId] } {
-		logMessage "Couldn't open file [getPasswordFilename]. Exiting from writePasswords..."
+		logMessage "Couldn't open file [getPasswordFilename]. Exiting from writePasswords... $fileId"
 		panic
 	} else {
 		set index 0
@@ -3622,9 +3729,9 @@ proc writeString {fileId toRecord} {
 }
 
 proc writeTopic {topicID topicContents} {
-	#debugLog "wt"
-	if { [catch {open "[getSnippetFilename $topicID]" w} fileId] } {
-		logMessage "Couldn't open file for writing.  Exiting from writeTopic..."
+	#debugLog "writeTopic"
+	if { [set error [catch {open "[getSnippetFilename $topicID]" w} fileId]] } {
+		logMessage "Couldn't open file [getSnippetFilename $topicID] for writing.  Exiting from writeTopic... $error $fileId"
 		panic
 	} else {
 		set index 0
@@ -3930,7 +4037,9 @@ switch -exact [getPageMode] {
 					puts -nonewline "<input type=\"hidden\" name=\"pageMode\"\
 						value=\"connect\">\n"
 					registerQueryData "pageMode" "connect"
-					if {[getProgramMode] != "MagicNotebook"} {
+					if {[getProgramMode] == "MagicNotebook"} {
+						displayStandardChoices
+					} else {
 						puts -nonewline "<p><input type=\"image\"\ border=\"0\"
 							name=\"Show another page\"
 							src=\"[getDocumentURL]/show_another_page.jpg\"></p>"
@@ -4027,7 +4136,7 @@ switch -exact [getPageMode] {
 				puts -nonewline "<input type=\"radio\" name=\"accessMethod\"\
 					value=\"createLogin\"\
 					onclick=\"document.[getProgramMode].submit()\">\
-					Create new account.<br>\n"
+					Create new account so you can access [getProgramMode].<br>\n"
 			}
 			puts -nonewline "<input type=\"radio\" name=\"accessMethod\"\
 				value=\"forgotPassword\"\
