@@ -1,10 +1,10 @@
-README for the Magic Notebook 1.2b
+README for the Magic Notebook 1.2.1
 
 LEGAL
 
     For the duration of this copyright statement, 'this software',
     'the Magic Notebook', 'Magic Notebook', 'MagicNotebook',
-	'Sidebar in a Can', 'Sidebar', 'sidebar', 'Snippets', and 'snippets' are
+    'Sidebar in a Can', 'Sidebar', 'sidebar', 'Snippets', and 'snippets' are
     taken to mean all files distributed with this product, and the
     arrangement and other original work related to this product.
 
@@ -30,9 +30,9 @@ LEGAL
 
 PURPOSE
 
-	The Magic Notebook adapts Sidebar in a Can/Snippets technology to allow
-	visitors to store an organized, easily editable set of notes useful for
-	everything from to do lists to recipes.
+    The Magic Notebook adapts Sidebar in a Can/Snippets technology to allow
+    visitors to store an organized, easily editable set of notes useful for
+    everything from to do lists to recipes.
 
 INSTALLATION AND SETUP
 
@@ -51,8 +51,8 @@ INSTALLATION AND SETUP
             * See USAGE below if you need help using Magic Notebook.
 
             * The install script is not meant to fully customize Magic
-			  Notebook, only to get it running.  See Customization below for
-			  further information on how to adjust Snippets to meet your needs.
+              Notebook, only to get it running.  See Customization below for
+              further information on how to adjust Snippets to meet your needs.
 
             * Security-conscious administrators should read Security
               below.
@@ -64,9 +64,9 @@ INSTALLATION AND SETUP
             well-commented and can be adjusted to control how the script
             works.
 
-			<the private MagicNotebook data directory>/general/logout is
-			displayed when a person logs out, and may be customized to your
-			needs.
+            <the private MagicNotebook data directory>/general/logout is
+            displayed when a person logs out, and may be customized to your
+            needs.
 
             The account <the server administrator e-mail you specify>
             initially given password
@@ -91,9 +91,10 @@ INSTALLATION AND SETUP
             scrutinized for security, and should be treated as such by
             security-conscious administrators.  If you examine the code
             and discover a vulnerability that could compromise the server,
-            please contact the author at jshayward@pobox.com.  The script is
-            intended to have light security and not to compromise a server,
-            but it is not intended to store credit card numbers or other
+            please contact the author at jonathan.hayward@pobox.com.  The
+			script is intended to have light security and not to compromise a
+			server, but it is not intended to store credit card numbers or
+			other
             sensitive information.
 
             The default installation sets
@@ -124,7 +125,7 @@ NOTES
 
     Contact
 
-        The author can be contacted at jshayward@pobox.com, and maintains a
-        website at http://JonathansCorner.com. The current version of Magic
-		Notebook may be obtained from
-		http://JonathansCorner.com/etc/MagicNotebook.
+        The author can be contacted at jonathan.hayward@pobox.com, and
+		maintains a website at http://JonathansCorner.com. The current version
+		of Magic Notebook may be obtained from
+        http://JonathansCorner.com/etc/MagicNotebook/.

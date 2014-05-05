@@ -263,14 +263,16 @@ proc upgrade {} {
 		substitute "$absoluteSnippetsDocumentRoot/privacy.html" "DOCUMENT_URL"\
 		  $documentURL
 	}
-	exec cp "data/general/logout" "[removeTrailingSlash\
-	  $filePrefix]/general/logout"
-	substitute "[removeTrailingSlash $filePrefix]/general/logout"\
-	  "DOCUMENT_URL" $documentURL
-	substitute "[removeTrailingSlash $filePrefix]/general/logout"\
-	  "FULL_BASE_URL" $fullBaseURL
-	substitute "[removeTrailingSlash $filePrefix]/general/header"\
-	  "DOCUMENT_URL" $documentURL
+	if {![file exists [removeTrailingSlash $filePrefix/general/logout]]} {
+		exec cp "data/general/logout" "[removeTrailingSlash\
+		  $filePrefix]/general/logout"
+		substitute "[removeTrailingSlash $filePrefix]/general/logout"\
+		  "DOCUMENT_URL" $documentURL
+		substitute "[removeTrailingSlash $filePrefix]/general/logout"\
+		  "FULL_BASE_URL" $fullBaseURL
+		substitute "[removeTrailingSlash $filePrefix]/general/header"\
+		  "DOCUMENT_URL" $documentURL
+	}
 	exec cp $programMode $absoluteSnippetsPath
 	exec chmod 600 $absoluteSnippetsPath
 	substitute "$absoluteSnippetsPath" "FULL_TCL_PATH" "$fullTclPath"
