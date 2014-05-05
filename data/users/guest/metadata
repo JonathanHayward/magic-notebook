@@ -1,0 +1,78 @@
+"MagicNotebook10306360221509286548" "Friends" "" "show folder " "top"
+"MagicNotebook10306360381493640426" "Alice Amazing" "<strong>Email:</strong> <a href=\"mailto:alice@example.com\">alice@example.com</a>
+<strong>Phone:</strong> [+1] (312) 555-1212
+<strong>Mailing address:</strong>
+123 Anystreet
+Chicago, IL 60606
+USA
+
+<strong>Notes:</strong>
+I need to get together with her some time to discuss the movie <em>Labyrinth</em>.
+" "show " "MagicNotebook10306360221509286548"
+"MagicNotebook10306362951237191628" "Bill Brash" "<strong>Email:</strong> <a href=\"mailto:bill@example.com\">bill@example.com</a>
+<strong>Phone:</strong> [+1] (312) 555-1212
+<strong>Mailing address:</strong>
+123 Anystreet
+Chicago, IL 60606
+USA
+
+<strong>Notes:</strong>
+Birthday is April 1<sup>st</sup>. I need to obtain a shipping estimate to put a quarter-ton of coal on his front door." "show " "MagicNotebook10306360221509286548"
+"MagicNotebook10306365051027108621" "Charlie Creative" "<strong>Email:</strong> <a href=\"mailto:charlie@example.com\">charlie@example.com</a>
+<strong>Phone:</strong> [+1] (312) 555-1212
+<strong>Home page:</strong> <a href=\"http://charliecreative.com\" target=\"_blank\">CharlieCreative.com</a>
+<strong>Mailing address:</strong>
+123 Anystreet
+Chicago, IL 60606
+USA" "show " "MagicNotebook10306360221509286548"
+"MagicNotebook1030637022509611414" "To Do" "Check with Eugene on the status of the paperwork.
+
+Spend some time organizing my room.
+
+Go to a friend's house after I get home--I feel exhausted!" "show " "MagicNotebook10306396982128624914"
+"MagicNotebook1030637077454397510" "Projects" "" "show folder " "top"
+"MagicNotebook1030637120411577458" "Books to Read" "Neil Postman's <em>Amusing Ourselves to Death: Public Discourse in an Age of Show  Business</em>
+Stephen Pile's <em>The Book of Heroic Failures</em>
+Jerome J. Langford's <em>Galileo, Science, and the Church</em>
+Roger Fischer et al's <em>Getting to Yes: Negotiating Agreement Without Giving In</em>
+Douglas Hofstadter's <em>G&ouml;del, Escher, Bach: An Eternal Golden Braid</em>
+Peter Kreeft's <em>Heaven: The Heart's Deepest Longing</em>
+Theophane the Monk's <em>Tales of a Magic Monastery</em>" "show " "MagicNotebook1030637077454397510"
+"MagicNotebook1030637404127863130" "Notes" "The car is making weird noises when I drive it. The best I've been able to isolate it is that it's when I'm turning to the right, usually at slow speeds, and am still braking.
+
+I only got through chapter 5 of George MacDonald's <em>Phantastes</em> before I had to return it, but it seems interesting, and the beech tree passage in chapter 5 is especially worth rereading.
+
+Backups are made by people who didn't.
+Test restores are made by people who didn't." "show " "MagicNotebook10306396982128624914"
+"MagicNotebook10306396982128624914" "Details of Life" "" "show folder" "top"
+"MagicNotebook1030640827999680432" "Where Things Are" "Eyeglass repair kit: on top of the clock.
+Joe's Christmas gift: tucked under the shoes in the back of the closet." "show " "MagicNotebook10306396982128624914"
+"MagicNotebook1030641510316913393" "Shopping List" "<strong>Groceries:</strong>
+1 gallon of milk
+Strawberries
+Ingredients for Caesar Salad
+
+<strong>Hardware:</strong>
+Replacement screen for the screen door" "show " "MagicNotebook10306396982128624914"
+"MagicNotebook9969510291074192511" "Author Quotes" "" "show " "MagicNotebook1030642477650158699"
+"MagicNotebook997110320697168660" "Cool Websites You Might Not Have Heard About" "" "show " "MagicNotebook1030642477650158699"
+"MagicNotebook1030642477650158699" "Snippets" "" "show folder " "top"
+"MagicNotebook10306431021275212120" "About the Magic Notebook" "What is the Magic Notebook? It's a place on the web where you can keep, edit, and organize notes. Once you set up an account, you can customize the notebook for your needs.
+
+What are some things you might use it for?" "show selected expand" "top"
+"MagicNotebook10306448831238591213" "Scratch Pad" "I've noticed that I seem to be able to concentrate longer, and do better with, tasks that I want to do during leisure than those I do at work.
+
+The claim, \"He can do it if he wants to\" usually has the insulting meaning of \"He can do it if he chooses, and the only reason he's doing badly is that he isn't trying.\" I've been thinking about this, and wondering if it might be true in a very different way: wanting to do something gives power. It gives long concentration and a more intense focus, and you <em>can</em> do things if you want to, that you <em>can't</em> if you don't.
+
+This could mean that I will make more progress at work by focusing on wanting to do the task than by putting more willpower into things I don't want to do." "show" "MagicNotebook10306396982128624914"
+"MagicNotebook1030645148973372728" "My Cool Programming Project (MCPP)" "When MCPP is running, the main window will be broken into three subwindows:
+
+A state window, allowing the user to see and manipulate the program's internal state.
+A command window, from which to give commands in MCPP's language, and
+An output window, in which the results of commands may be seen.
+
+Most programs have some equivalent of command and output, and you give a command to produce output--which is good in most aspects, but not for MCPP. The neglected internal state will be very interesting.
+
+MCPP is <em>not</em> an AI program, in the sense of something meant to have intelligence in itself. It is meant to function as a cognitive artifact--something that doesn't compete with human intelligence but allows human intelligence to move with amplified power.
+
+MCPP should be able to run on any computer running TOSTDS." "show " "MagicNotebook1030637077454397510"

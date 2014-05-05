@@ -1,4 +1,136 @@
 magic-notebook
 ==============
 
-The Magic Notebook
+## The Magic Notebook
+
+README for The Magic Notebook
+
+LEGAL
+
+    For the duration of this copyright statement, 'this software',
+    'the Magic Notebook', 'Magic Notebook', 'MagicNotebook',
+	'Sidebar in a Can', 'Sidebar', 'sidebar', 'Snippets', and 'snippets' are
+    taken to mean all files distributed with this product, and the
+    arrangement and other original work related to this product.
+
+    License
+
+        This software is copyright 2001 by Jonathan Hayward,
+        and licensed to you under the Artistic License, which
+        should be present in the file license.txt; if you did
+        not receive this file, consult the version online at
+        http://www.perl.com/language/misc/Artistic.html.
+
+    Warrantee
+
+        Jonathan Hayward makes no warranties, express or implied,
+        regarding this software.  In no event shall Jonathan Hayward
+        be liable for any consequential, special, incidental, or
+        indirect damages of any kind arising out of the license
+        of, use of, or inability to use any software or product
+        covered under this license, even if Jonathan Hayward
+        has been advised of the possibility of such damages.
+        This limitation of liability and risks is reflected in the
+        price of this software.
+
+PURPOSE
+
+	The Magic Notebook adapts Sidebar in a Can/Snippets technology to allow
+	visitors to store an organized, easily editable set of notes useful for
+	everything from to do lists to recipes.
+
+INSTALLATION AND SETUP
+
+    Basics
+
+        The setup procedure is slightly different depending on
+        whether you want to install a new copy of Magic Notebook, or
+        upgrade an existing one.
+
+            * If you have not installed Magic Notebook before, run
+              "./install" and answer the questions provided.  This will run
+              a simplified Unix install script and should create
+              a working, out-of-the-box installation when supplied
+              appropriate values.
+
+            * See USAGE below if you need help using Magic Notebook.
+
+            * The install script is not meant to fully customize Magic
+			  Notebook, only to get it running.  See Customization below for
+			  further information on how to adjust Snippets to meet your needs.
+
+            * Security-conscious administrators should read Security
+              below.
+
+        Customization
+
+            The configuration file at
+            /usr/lib/MagicNotebook/general/config is
+            well-commented and can be adjusted to control how the script
+            works.
+
+            The account root@jonathan.haywardfamily.org
+            initially given password
+            change_me_167 is a special
+            account in that it has a page of administrative controls. 
+            Many of these controls should explain themselves, but there
+            are some non-obvious ways to use them.
+
+            The beginning and ending of a page are read from
+            /usr/lib/MagicNotebook/general/header and
+            /usr/lib/MagicNotebook/general/footer
+            respectively.  Editing those files provides a powerful way to
+            customize the script.
+
+            The images used for buttons and for backgrounds are found in
+            /var/www/html/MagicNotebook and may be replaced with
+            images tailored to your site's needs.
+
+        Security
+
+            The present release of Magic Notebook has not been closely
+            scrutinized for security, and should be treated as such by
+            security-conscious administrators.  If you examine the code
+            and discover a vulnerability that could compromise the server,
+            please contact the author at jshayward@pobox.com.  The script is
+            intended to have light security and not to compromise a server,
+            but it is not intended to store credit card numbers or other
+            sensitive information.
+
+            The default installation sets
+            /usr/lib/MagicNotebook and contents
+            to mode 777.  Administrators are encouraged to set
+            directory and contents to mode 700, owned by the
+            effective user ID that CGI scripts will be running under.
+
+USAGE
+
+    Magic Notebook is designed to be run as a straightforward web
+    application, with much administrative activity performed on-web.
+    Rather than trying to explain how to use it, I simply encourage you
+    to explore.
+
+NOTES
+
+    Payment
+
+        Magic Notebook is linkware. It is available to you free of charge.
+        If you like it, I would be very happy if you would visit
+        http://JonathansCorner.com and consider linking to it.
+
+    Programmer's notes
+
+        The file format for MagicNotebook is extremely simple; it should
+        be straightforward to write programs that will import other
+        content (i.e. fortune cookie messages) into it.
+
+    Bugs
+
+        For security-related concerns, see Security above.
+
+    Contact
+
+        The author can be contacted at jshayward@pobox.com, and maintains a
+        website at http://JonathansCorner.com. The current version of Magic
+		Notebook may be obtained from
+		http://JonathansCorner.com/etc/MagicNotebook.
