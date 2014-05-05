@@ -1,0 +1,246 @@
+#!/bin/sh
+#\
+exec tclsh "$0" ${1+"$@"}
+
+#
+# Magic Notebook/Sidebar in a Can/Snippets upgrade script
+#
+
+proc addTrailingSlash {path} {
+	if {[regexp "/$" $path]} {
+		return $path
+	} else {
+		return "$path/"
+	}
+}
+
+proc getValue {default} {
+	puts -nonewline " \[$default\]: "
+	flush stdout
+	set response [gets stdin]
+	if {$response == ""} {
+		return $default
+	} else {
+		return $response
+	}
+}
+
+proc init {} {
+	global absoluteSnippetsPath
+	global documentURL
+	global filePrefix
+	global fullProgramName
+	global fullTclPath
+	global programMode
+	global shouldUpdateHTML
+	#set programMode "sidebar"
+	set programMode "MagicNotebook"
+	set documentURL "/$programMode/"
+	#set fullProgramName "Sidebar in a Can"
+	set fullProgramName "Magic Notebook"
+	#set absoluteSnippetsPath "/usr/pkg/libexec/cgi-bin/$programMode"
+	set absoluteSnippetsPath "/var/www/cgi-bin/$programMode"
+	#set filePrefix "/usr/pkg/share/httpd/$programMode/"
+	set filePrefix "/var/www/$programMode/"
+	#set fullTclPath "/usr/pkg/bin/tclsh"
+	set fullTclPath "/usr/bin/tclsh"
+	set shouldUpdateHTML "yes"
+	puts -nonewline "[exec clear]"
+	puts -nonewline\
+"You are beginning the $fullProgramName UPGRADE script.  This script will ask\
+\nyou a few questions in order to set up the script.  If you don't know an\
+\nappropriate answer to one of the questions, and don't want to use this\
+\nscript's guess, you can quit at any time and restart the script when you\
+\nknow how to answer the questions. The script will ask you all informational\
+\nquestions before making any changes.\
+\n\
+\nQuestions asked are typical of a traditional Unix/Linux interactive\
+\ninstallation script.  The installer is encouraged to have at least two\
+\nwindows open during installation: one for this script, and one to poke\
+\npoke around on the system and find appropriate answers to script questions.\
+\n\
+\nHit return to continue..."
+gets stdin
+}
+
+# Not indented, because of spacing concerns.
+proc interview {} {
+global absoluteSnippetsPath
+global documentURL
+global filePrefix
+global fullProgramName
+global fullTclPath
+global programMode
+global shouldUpdateHTML
+
+puts -nonewline "\
+\nWhat is the full path to the Tcl executable (usually tclsh)?\
+\n\
+\nTcl path:"
+set fullTclPath [getValue $fullTclPath]
+puts -nonewline "\
+\nWhat absolute path is $fullProgramName currently stored at? (Include the\
+\nfilename: /path/$programMode, not /path/.)\
+\n\
+\nAbsolute path"
+set absoluteSnippetsPath [getValue $absoluteSnippetsPath]
+puts -nonewline "\
+\nWhat URL are $fullProgramName documents stored at?\
+\n\
+\nDocument URL"
+set documentURL [getValue $documentURL]
+puts -nonewline\
+"\nWhat is the private $fullProgramName data directory?\
+\n\
+\nPrivate data directory"
+set filePrefix [getValue $filePrefix]
+puts -nonewline\
+"\nThe beginning and end of pages have been changed slightly to use CSS.\
+\nUpdating them will make the pages look nicer, but overwrite any\
+\ncustomizations you made to the start pages.\
+\n\
+\nWould you like to use the updated HTML (yes/no) \[$shouldUpdateHTML\]?"
+set shouldUpdateHTML [getValue $shouldUpdateHTML]
+puts -nonewline "\
+\nYou have selected the following options:\
+\n"
+puts -nonewline\
+"\n\tAbsolute path to script: $absoluteSnippetsPath"
+puts -nonewline\
+"\n\tFull path to Tcl: $fullTclPath"
+puts -nonewline\
+"\n\tPrivate $programMode data directory: $filePrefix"
+puts -nonewline\
+"\n\tShould HTML be changed: $shouldUpdateHTML"
+puts -nonewline "\n\
+\nAre these options all correct (yes/no)"
+if {[isTrue [getValue "yes"]]} {
+return 1
+} else {
+puts -nonewline "\
+\nWould you rather change your answers or quit for now (change/quit)"
+set response [getValue change]
+if {[regexp -nocase "^c" $response]} {
+puts -nonewline "\
+\nI'll ask you the same questions again.  If you want to keep your answer the\
+\nsame, just hit enter.\
+\n"
+return [interview]
+} else {
+puts -nonewline "Bye! You can always upgrade $fullProgramName at a later time.\n"
+exit 0
+}
+}
+}
+
+proc isTrue {optionValue} {
+	switch [string tolower $optionValue] {
+		true -
+		yes -
+		on -
+		1 {
+			return 1
+		}
+		default {
+			return 0
+		}
+	}
+}
+
+proc prefixTildeWithSlash {path} {
+	if {[regexp "^~" $path]} {
+		regsub "~" $path "/$" result
+		return $result
+	} else {
+		return $path
+	}
+}
+
+proc removeTrailingSlash {path} {
+	if {[regexp "/$" $path]} {
+		regsub "/$" $path "" result
+		return $result
+	} else {
+		return $path
+	}
+}
+
+proc standardizeResponses {} {
+	global absoluteSnippetsPath
+	global filePrefix
+	global fullTclPath
+	set absoluteSnippetsPath [removeTrailingSlash $absoluteSnippetsPath]
+	set filePrefix [addTrailingSlash $filePrefix]
+}
+
+proc substitute {filename tag value} {
+	if { [ catch { open $filename r } readId ] } {
+		puts stderr "Couldn't open file $filename for reading! Leaving\
+			untouched."
+		return
+	} else {
+		set fileContents [read $readId]
+		regsub -all $tag $fileContents $value fileContents
+		close $readId
+		if { [ catch { open $filename w } writeId ] } {
+			puts stderr "Couldn't open file $filename for writing! Leaving\
+				untouched."
+			return
+		} else {
+			puts -nonewline $writeId $fileContents
+		}
+		close $writeId
+	}
+}
+
+proc upgrade {} {
+	global absoluteSnippetsPath
+	global documentURL
+	global filePrefix
+	global fullProgramName
+	global fullTclPath
+	global programMode
+	puts -nonewline "\nUpgrading...\n"
+	exec cp "[removeTrailingSlash $filePrefix]/general/header"\
+	  "[removeTrailingSlash $filePrefix]/general/header.bak"
+	exec cp "[removeTrailingSlash $filePrefix]/general/footer"\
+	  "[removeTrailingSlash $filePrefix]/general/footer.bak"
+	exec cp "data/general/header" "[removeTrailingSlash\
+	  $filePrefix]/general/header"
+	exec cp "data/general/footer" "[removeTrailingSlash\
+	  $filePrefix]/general/footer"
+	substitute "[removeTrailingSlash $filePrefix]/general/header"\
+	  "DOCUMENT_URL" $documentURL
+	exec cp $programMode $absoluteSnippetsPath
+	exec chmod 600 $absoluteSnippetsPath
+	substitute "$absoluteSnippetsPath" "FULL_TCL_PATH" "$fullTclPath"
+	substitute "$absoluteSnippetsPath" "CONFIG_FILENAME"\
+		"[removeTrailingSlash $filePrefix]/general/config"
+	exec chmod 755 $absoluteSnippetsPath
+	puts -nonewline \
+"\nThe upgrade is complete.  Further information about $fullProgramName is\
+\navailable in the README file.  If you'd like to know how to get the best out\
+\nof $fullProgramName, please read it.\
+\n"
+	switch $programMode {
+		snippets {
+			puts -nonewline\
+"\n\
+\nHappy snipping!\
+\n\
+\n"
+		}
+		MagicNotebook {
+		puts -nonewline "\nThank you for using the Magic Notebook!\n\n"
+		}
+		sidebar -
+		default {
+			puts -nonewline "\n\n"
+		}
+	}
+}
+
+init
+interview
+standardizeResponses
+upgrade

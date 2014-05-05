@@ -8,7 +8,7 @@ USA
 
 <strong>Notes:</strong>
 I need to get together with her some time to discuss the movie <em>Labyrinth</em>.
-" "show " "MagicNotebook10306360221509286548"
+" "show expand " "MagicNotebook10306360221509286548"
 "MagicNotebook10306362951237191628" "Bill Brash" "<strong>Email:</strong> <a href=\"mailto:bill@example.com\">bill@example.com</a>
 <strong>Phone:</strong> [+1] (312) 555-1212
 <strong>Mailing address:</strong>
@@ -44,7 +44,7 @@ I only got through chapter 5 of George MacDonald's <em>Phantastes</em> before I 
 
 Backups are made by people who didn't.
 Test restores are made by people who didn't." "show " "MagicNotebook10306396982128624914"
-"MagicNotebook10306396982128624914" "Details of Life" "" "show folder" "top"
+"MagicNotebook10306396982128624914" "Details of Life" "" "show folder " "top"
 "MagicNotebook1030640827999680432" "Where Things Are" "Eyeglass repair kit: on top of the clock.
 Joe's Christmas gift: tucked under the shoes in the back of the closet." "show " "MagicNotebook10306396982128624914"
 "MagicNotebook1030641510316913393" "Shopping List" "<strong>Groceries:</strong>
@@ -59,7 +59,7 @@ Replacement screen for the screen door" "show " "MagicNotebook103063969821286249
 "MagicNotebook1030642477650158699" "Snippets" "" "show folder " "top"
 "MagicNotebook10306431021275212120" "About the Magic Notebook" "What is the Magic Notebook? It's a place on the web where you can keep, edit, and organize notes. Once you set up an account, you can customize the notebook for your needs.
 
-What are some things you might use it for?" "show selected expand" "top"
+What are some things you might use it for?" "show expand selected" "top"
 "MagicNotebook10306448831238591213" "Scratch Pad" "I've noticed that I seem to be able to concentrate longer, and do better with, tasks that I want to do during leisure than those I do at work.
 
 The claim, \"He can do it if he wants to\" usually has the insulting meaning of \"He can do it if he chooses, and the only reason he's doing badly is that he isn't trying.\" I've been thinking about this, and wondering if it might be true in a very different way: wanting to do something gives power. It gives long concentration and a more intense focus, and you <em>can</em> do things if you want to, that you <em>can't</em> if you don't.
@@ -75,4 +75,19 @@ Most programs have some equivalent of command and output, and you give a command
 
 MCPP is <em>not</em> an AI program, in the sense of something meant to have intelligence in itself. It is meant to function as a cognitive artifact--something that doesn't compete with human intelligence but allows human intelligence to move with amplified power.
 
-MCPP should be able to run on any computer running TOSTDS." "show " "MagicNotebook1030637077454397510"
+MCPP should be able to run on any computer running TOSTDS." "show expand " "MagicNotebook1030637077454397510"
+"MagicNotebook10317527951428541123" "Portable Bookmarks" "" "show folder " "top"
+"MagicNotebook1031753452771515799" "Reading" "<a href=\"http://firstthings.com\" target=\"_blank\">First Things</a>
+<a href=\"http://jonathanscorner.com\" target=\"_blank\">Jonathan's Corner</a>
+<a href=\"http://www.luminarium.org/medlit/\" target=\"_blank\">Medieval Literature</a>" "show " "MagicNotebook10317527951428541123"
+"MagicNotebook1031754052171412543" "Amusement" "<a href=\"http://dilbert.com\" target=\"_blank\">Dilbert</a>
+<a href=\"http://www.bulwer-lytton.com\" target=\"_blank\">It Was a Dark and Stormy Night...</a>" "show expand " "MagicNotebook10317527951428541123"
+"MagicNotebook1031754333110242405" "Useful Things" "" "show folder " "MagicNotebook10317527951428541123"
+"MagicNotebook1031754349126158672" "Information" "<a href=\"http://dict.org\" target=\"_blank\">Dictionary</a>
+<a href=\"http://mapquest.com\" target=\"_blank\">MapQuest</a>
+<a href=\"http://weather.com\" target=\"_blank\">Weather</a>
+<a href=\"http://yellowpages.com\" target=\"_blank\">Yellow Pages</a>
+" "show expand " "MagicNotebook1031754333110242405"
+"MagicNotebook1031754488265259486" "Research" "<a href=\"http://google.com\" target=\"_blank\">Google</a>
+<a href=\"http://www.fool.com\" target=\"_blank\">The Motley Fool</a>
+<a href=\"http://www.iTools.com/research-it/\" target=\"_blank\">Research It!</a>" "show " "MagicNotebook1031754333110242405"

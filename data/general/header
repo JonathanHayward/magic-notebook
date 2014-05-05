@@ -3,10 +3,18 @@
 <head>
 <meta http-equiv="Content-Language" content="en-US">
 <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
-<meta http-equiv="Refresh" content="900; URL=FULL_BASE_URL">
 <title>The Magic Notebook</title>
+<style>
+<!--
+A.titlelink { text-decoration: none; size: +1; strong }
+-->
+</style>
 </head>
-<body bgcolor="white" link="#2040B0" vlink="#A040B0" alink="#B04040" background="DOCUMENT_URL/background.jpg">
+<!--
+Similar colors to the default, but mute the blue/purple/red somewhat.
+-->
+<body bgcolor="white" link="#2040B0" vlink="#A040B0" alink="#B04040"
+text="black" background="DOCUMENT_URL/background.jpg">
 <table width="100%" border="0" cellpadding="0" cellspacing="0">
 	<tr>
 		<td colspan="2" height="30">

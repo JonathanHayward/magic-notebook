@@ -209,6 +209,7 @@ proc install {} {
 	exec rm -rf "$absoluteSnippetsPath"
 	exec mv "/tmp/[getProgramMode]" "$absoluteSnippetsPath"
 	if {[exec whoami] == "root"} {
+		exec rm -rf "/usr/doc/[getProgramMode]/"
 		exec mkdir -p "/usr/doc/[getProgramMode]/"
 		exec cp "README" "license.txt" "/usr/doc/[getProgramMode]/"
 	}
