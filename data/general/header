@@ -4,9 +4,12 @@
 <meta http-equiv="Content-Language" content="en-US">
 <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
 <title>The Magic Notebook</title>
-<style>
 <!--
 A.titlelink { text-decoration: none; font-size: larger; font-weight: bold }
+-->
+<style>
+<!--
+A.titlelink { text-decoration: none; font-weight: bold }
 -->
 </style>
 </head>
